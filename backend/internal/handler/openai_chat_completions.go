@@ -75,13 +75,6 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 	reqStream := gjson.GetBytes(body, "stream").Bool()
 
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
-	maybeLogCryptoProfileMatch(
-		c.Request.Context(),
-		reqLog,
-		h.cryptoProfileDetector,
-		extractCryptoProfileMessageTextFromMessagesBody(body),
-		EndpointChatCompletions,
-	)
 
 	setOpsRequestContext(c, reqModel, reqStream, body)
 
@@ -108,6 +101,13 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		h.handleStreamingAwareError(c, status, code, message, streamStarted)
 		return
 	}
+	maybeLogCryptoProfileMatch(
+		c.Request.Context(),
+		reqLog,
+		h.cryptoProfileDetector,
+		extractCryptoProfileMessageTextFromMessagesBody(body),
+		EndpointChatCompletions,
+	)
 
 	sessionHash := h.gatewayService.GenerateSessionHash(c, body)
 	promptCacheKey := h.gatewayService.ExtractSessionID(c, body)
