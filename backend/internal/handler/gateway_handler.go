@@ -45,6 +45,7 @@ type GatewayHandler struct {
 	apiKeyService             *service.APIKeyService
 	usageRecordWorkerPool     *service.UsageRecordWorkerPool
 	errorPassthroughService   *service.ErrorPassthroughService
+	cryptoProfileDetector     service.CryptoProfileDetector
 	concurrencyHelper         *ConcurrencyHelper
 	userMsgQueueHelper        *UserMsgQueueHelper
 	maxAccountSwitches        int
@@ -65,6 +66,7 @@ func NewGatewayHandler(
 	apiKeyService *service.APIKeyService,
 	usageRecordWorkerPool *service.UsageRecordWorkerPool,
 	errorPassthroughService *service.ErrorPassthroughService,
+	cryptoProfileDetector service.CryptoProfileDetector,
 	userMsgQueueService *service.UserMessageQueueService,
 	cfg *config.Config,
 	settingService *service.SettingService,
@@ -98,6 +100,7 @@ func NewGatewayHandler(
 		apiKeyService:             apiKeyService,
 		usageRecordWorkerPool:     usageRecordWorkerPool,
 		errorPassthroughService:   errorPassthroughService,
+		cryptoProfileDetector:     cryptoProfileDetector,
 		concurrencyHelper:         NewConcurrencyHelper(concurrencyService, SSEPingFormatClaude, pingInterval),
 		userMsgQueueHelper:        umqHelper,
 		maxAccountSwitches:        maxAccountSwitches,
@@ -157,6 +160,13 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	reqModel := parsedReq.Model
 	reqStream := parsedReq.Stream
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
+	maybeLogCryptoProfileMatch(
+		c.Request.Context(),
+		reqLog,
+		h.cryptoProfileDetector,
+		extractCryptoProfileMessageTextFromParsedRequest(parsedReq),
+		EndpointMessages,
+	)
 
 	// 设置 max_tokens=1 + haiku 探测请求标识到 context 中
 	// 必须在 SetClaudeCodeClientContext 之前设置，因为 ClaudeCodeValidator 需要读取此标识进行绕过判断

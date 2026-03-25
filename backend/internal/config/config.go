@@ -377,6 +377,8 @@ type GatewayConfig struct {
 	// OpenAIPassthroughAllowTimeoutHeaders: OpenAI 透传模式是否放行客户端超时头
 	// 关闭（默认）可避免 x-stainless-timeout 等头导致上游提前断流。
 	OpenAIPassthroughAllowTimeoutHeaders bool `mapstructure:"openai_passthrough_allow_timeout_headers"`
+	// CryptoProfileDetection: 基于 OpenRouter 的 crypto/web3 profile 识别
+	CryptoProfileDetection CryptoProfileDetectionConfig `mapstructure:"crypto_profile_detection"`
 	// OpenAIWS: OpenAI Responses WebSocket 配置（默认开启，可按需回滚到 HTTP）
 	OpenAIWS GatewayOpenAIWSConfig `mapstructure:"openai_ws"`
 
@@ -467,6 +469,23 @@ type GatewayConfig struct {
 	// UserMessageQueue: 用户消息串行队列配置
 	// 对 role:"user" 的真实用户消息实施账号级串行化 + RPM 自适应延迟
 	UserMessageQueue UserMessageQueueConfig `mapstructure:"user_message_queue"`
+}
+
+// CryptoProfileDetectionConfig 配置基于 OpenRouter 的 crypto/web3 profile 识别。
+// 仅用于入口判定和结构化日志，不改变当前请求的转发目标。
+type CryptoProfileDetectionConfig struct {
+	Enabled bool `mapstructure:"enabled"`
+	// Endpoint 为完整的 OpenRouter Chat Completions URL。
+	Endpoint string `mapstructure:"endpoint"`
+	// OpenRouterAPIKey 建议通过环境变量注入，避免写入明文配置文件。
+	OpenRouterAPIKey string `mapstructure:"openrouter_api_key"`
+	// Model 为 OpenRouter 路由模型标识，例如 openai/gpt-5.2。
+	Model string `mapstructure:"model"`
+	// TimeoutSeconds 为检测请求的总超时。
+	TimeoutSeconds int `mapstructure:"timeout_seconds"`
+	// HTTPReferer / Title 为 OpenRouter 可选归因头。
+	HTTPReferer string `mapstructure:"http_referer"`
+	Title       string `mapstructure:"title"`
 }
 
 // UserMessageQueueConfig 用户消息串行队列配置
@@ -1334,6 +1353,13 @@ func setDefaults() {
 	viper.SetDefault("gateway.max_account_switches_gemini", 3)
 	viper.SetDefault("gateway.force_codex_cli", false)
 	viper.SetDefault("gateway.openai_passthrough_allow_timeout_headers", false)
+	viper.SetDefault("gateway.crypto_profile_detection.enabled", false)
+	viper.SetDefault("gateway.crypto_profile_detection.endpoint", "https://openrouter.ai/api/v1/chat/completions")
+	viper.SetDefault("gateway.crypto_profile_detection.openrouter_api_key", "")
+	viper.SetDefault("gateway.crypto_profile_detection.model", "openai/gpt-5.2")
+	viper.SetDefault("gateway.crypto_profile_detection.timeout_seconds", 3)
+	viper.SetDefault("gateway.crypto_profile_detection.http_referer", "")
+	viper.SetDefault("gateway.crypto_profile_detection.title", "sub2api")
 	// OpenAI Responses WebSocket（默认开启；可通过 force_http 紧急回滚）
 	viper.SetDefault("gateway.openai_ws.enabled", true)
 	viper.SetDefault("gateway.openai_ws.mode_router_v2_enabled", false)

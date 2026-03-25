@@ -424,6 +424,8 @@ var ProviderSet = wire.NewSet(
 	NewBillingCacheService,
 	NewAnnouncementService,
 	NewAdminService,
+	NewOpenRouterCryptoProfileDetector,
+	wire.Bind(new(CryptoProfileDetector), new(*OpenRouterCryptoProfileDetector)),
 	NewGatewayService,
 	ProvideSoraMediaStorage,
 	ProvideSoraMediaCleanupService,

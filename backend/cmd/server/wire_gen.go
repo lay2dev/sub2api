@@ -167,6 +167,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	}
 	billingService := service.NewBillingService(configConfig, pricingService)
 	identityService := service.NewIdentityService(identityCache)
+	openRouterCryptoProfileDetector := service.NewOpenRouterCryptoProfileDetector(configConfig)
 	deferredService := service.ProvideDeferredService(accountRepository, timingWheelService)
 	claudeTokenProvider := service.ProvideClaudeTokenProvider(accountRepository, geminiTokenCache, oAuthService, oauthRefreshAPI)
 	digestSessionStore := service.NewDigestSessionStore()
@@ -211,8 +212,8 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	usageRecordWorkerPool := service.NewUsageRecordWorkerPool(configConfig)
 	userMsgQueueCache := repository.NewUserMsgQueueCache(redisClient)
 	userMessageQueueService := service.ProvideUserMessageQueueService(userMsgQueueCache, rpmCache, configConfig)
-	gatewayHandler := handler.NewGatewayHandler(gatewayService, geminiMessagesCompatService, antigravityGatewayService, userService, concurrencyService, billingCacheService, usageService, apiKeyService, usageRecordWorkerPool, errorPassthroughService, userMessageQueueService, configConfig, settingService)
-	openAIGatewayHandler := handler.NewOpenAIGatewayHandler(openAIGatewayService, concurrencyService, billingCacheService, apiKeyService, usageRecordWorkerPool, errorPassthroughService, configConfig)
+	gatewayHandler := handler.NewGatewayHandler(gatewayService, geminiMessagesCompatService, antigravityGatewayService, userService, concurrencyService, billingCacheService, usageService, apiKeyService, usageRecordWorkerPool, errorPassthroughService, openRouterCryptoProfileDetector, userMessageQueueService, configConfig, settingService)
+	openAIGatewayHandler := handler.NewOpenAIGatewayHandler(openAIGatewayService, concurrencyService, billingCacheService, apiKeyService, usageRecordWorkerPool, errorPassthroughService, openRouterCryptoProfileDetector, configConfig)
 	soraSDKClient := service.ProvideSoraSDKClient(configConfig, httpUpstream, openAITokenProvider, accountRepository, soraAccountRepository)
 	soraMediaStorage := service.ProvideSoraMediaStorage(configConfig)
 	soraGatewayService := service.NewSoraGatewayService(soraSDKClient, rateLimitService, httpUpstream, configConfig)
