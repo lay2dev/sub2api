@@ -341,7 +341,7 @@ gateway:
     openrouter_api_key: ""
     # Router model used for classification
     # 用于分类的 OpenRouter 模型
-    model: "openai/gpt-5.2"
+    model: "qwen/qwen3.5-122b-a10b"
     # Detection timeout (seconds)
     # 检测超时（秒）
     timeout_seconds: 3

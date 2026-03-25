@@ -33,7 +33,6 @@ func TestOpenRouterCryptoProfileDetectorDetect_Match(t *testing.T) {
 				Enabled:          true,
 				Endpoint:         "https://openrouter.test/api/v1/chat/completions",
 				OpenRouterAPIKey: "or-key-test",
-				Model:            "openai/gpt-5.2",
 				TimeoutSeconds:   3,
 				HTTPReferer:      "https://sub2api.local",
 				Title:            "sub2api-test",
@@ -70,12 +69,12 @@ func TestOpenRouterCryptoProfileDetectorDetect_Match(t *testing.T) {
 	require.NotNil(t, result)
 	require.True(t, result.Matched)
 	require.Equal(t, "dex-routing", result.Profile)
-	require.Equal(t, "openai/gpt-5.2", result.Model)
+	require.Equal(t, "qwen/qwen3.5-122b-a10b", result.Model)
 
 	require.Equal(t, "Bearer or-key-test", capturedAuth)
 	require.Equal(t, "https://sub2api.local", capturedReferer)
 	require.Equal(t, "sub2api-test", capturedTitle)
-	require.Equal(t, "openai/gpt-5.2", capturedBody["model"])
+	require.Equal(t, "qwen/qwen3.5-122b-a10b", capturedBody["model"])
 
 	messages, ok := capturedBody["messages"].([]any)
 	require.True(t, ok)
@@ -94,7 +93,6 @@ func TestOpenRouterCryptoProfileDetectorDetect_UsesStructuredOutputsAndRetriesOn
 				Enabled:          true,
 				Endpoint:         "https://openrouter.test/api/v1/chat/completions",
 				OpenRouterAPIKey: "or-key-test",
-				Model:            "openai/gpt-5.2",
 				TimeoutSeconds:   3,
 			},
 		},

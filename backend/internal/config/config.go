@@ -479,7 +479,7 @@ type CryptoProfileDetectionConfig struct {
 	Endpoint string `mapstructure:"endpoint"`
 	// OpenRouterAPIKey 建议通过环境变量注入，避免写入明文配置文件。
 	OpenRouterAPIKey string `mapstructure:"openrouter_api_key"`
-	// Model 为 OpenRouter 路由模型标识，例如 openai/gpt-5.2。
+	// Model 为 OpenRouter 路由模型标识，例如 qwen/qwen3.5-122b-a10b。
 	Model string `mapstructure:"model"`
 	// TimeoutSeconds 为检测请求的总超时。
 	TimeoutSeconds int `mapstructure:"timeout_seconds"`
@@ -1356,7 +1356,7 @@ func setDefaults() {
 	viper.SetDefault("gateway.crypto_profile_detection.enabled", false)
 	viper.SetDefault("gateway.crypto_profile_detection.endpoint", "https://openrouter.ai/api/v1/chat/completions")
 	viper.SetDefault("gateway.crypto_profile_detection.openrouter_api_key", "")
-	viper.SetDefault("gateway.crypto_profile_detection.model", "openai/gpt-5.2")
+	viper.SetDefault("gateway.crypto_profile_detection.model", "qwen/qwen3.5-122b-a10b")
 	viper.SetDefault("gateway.crypto_profile_detection.timeout_seconds", 3)
 	viper.SetDefault("gateway.crypto_profile_detection.http_referer", "")
 	viper.SetDefault("gateway.crypto_profile_detection.title", "sub2api")

@@ -99,7 +99,7 @@ func NewOpenRouterCryptoProfileDetector(cfg *config.Config) *OpenRouterCryptoPro
 	}
 	model := strings.TrimSpace(detectCfg.Model)
 	if model == "" {
-		model = "openai/gpt-5.2"
+		model = "qwen/qwen3.5-122b-a10b"
 	}
 
 	detector.endpoint = endpoint
