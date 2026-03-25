@@ -1,0 +1,283 @@
+{
+  "must_hit": [
+    {
+      "id": "hit_token_research_01",
+      "text": "XX Token 适合买吗？基本盘、团队背景、X 信息、安全性、解锁信息怎么样？",
+      "expected_match": true,
+      "expected_profile": "token-research"
+    },
+    {
+      "id": "hit_token_research_02",
+      "text": "帮我分析一下这个 Token 值不值得买，重点看代币经济学和团队履历。",
+      "expected_match": true,
+      "expected_profile": "token-research"
+    },
+    {
+      "id": "hit_token_research_03",
+      "text": "最近有什么热门 Token 值得关注？顺便看看风险和解锁。",
+      "expected_match": true,
+      "expected_profile": "token-research"
+    },
+    {
+      "id": "hit_token_research_04",
+      "text": "这个币最近很火，帮我做个 research：安全、筹码、团队、叙事。",
+      "expected_match": true,
+      "expected_profile": "token-research"
+    },
+    {
+      "id": "hit_token_research_05",
+      "text": "我想知道某个 Meme Token 能不能参与，帮我分析一下基本面和风险。",
+      "expected_match": true,
+      "expected_profile": "token-research"
+    },
+    {
+      "id": "hit_crypto_basic_01",
+      "text": "当前市场的多空情况怎么样？巨鲸仓位偏多还是偏空？",
+      "expected_match": true,
+      "expected_profile": "crypto-basic"
+    },
+    {
+      "id": "hit_crypto_basic_02",
+      "text": "最近 BTC、ETH 的市场情绪如何？有大户在加仓吗？",
+      "expected_match": true,
+      "expected_profile": "crypto-basic"
+    },
+    {
+      "id": "hit_crypto_basic_03",
+      "text": "帮我分析一下这个链上地址最近在干什么。",
+      "expected_match": true,
+      "expected_profile": "crypto-basic"
+    },
+    {
+      "id": "hit_crypto_basic_04",
+      "text": "xxx 地址的分析，看看是不是聪明钱地址。",
+      "expected_match": true,
+      "expected_profile": "crypto-basic"
+    },
+    {
+      "id": "hit_crypto_basic_05",
+      "text": "有什么资金套利的机会？最近跨所或者链上有没有低风险套利？",
+      "expected_match": true,
+      "expected_profile": "crypto-basic"
+    },
+    {
+      "id": "hit_crypto_basic_06",
+      "text": "最近 crypto 有什么消息和热点？",
+      "expected_match": true,
+      "expected_profile": "crypto-basic"
+    },
+    {
+      "id": "hit_crypto_basic_07",
+      "text": "加密市场最近有什么热门叙事？",
+      "expected_match": true,
+      "expected_profile": "crypto-basic"
+    },
+    {
+      "id": "hit_crypto_basic_08",
+      "text": "最近链上有什么值得关注的异动？",
+      "expected_match": true,
+      "expected_profile": "crypto-basic"
+    },
+    {
+      "id": "hit_crypto_basic_09",
+      "text": "最近有哪些 whale 地址在买入热门币？",
+      "expected_match": true,
+      "expected_profile": "crypto-basic"
+    },
+    {
+      "id": "hit_crypto_basic_10",
+      "text": "帮我总结一下今天加密市场的热点新闻和资金流向。",
+      "expected_match": true,
+      "expected_profile": "crypto-basic"
+    },
+    {
+      "id": "hit_dex_routing_01",
+      "text": "把 10 ETH 换成 USDC，哪个 DEX 路由更优？滑点和 gas 怎么样？",
+      "expected_match": true,
+      "expected_profile": "dex-routing"
+    },
+    {
+      "id": "hit_dex_routing_02",
+      "text": "我想在以太坊上把 WETH 换成 USDT，帮我看最优 swap 路径。",
+      "expected_match": true,
+      "expected_profile": "dex-routing"
+    },
+    {
+      "id": "hit_uniswap_01",
+      "text": "Uniswap 上这个池子的流动性和价格区间怎么看？",
+      "expected_match": true,
+      "expected_profile": "uniswap"
+    },
+    {
+      "id": "hit_defi_lending_01",
+      "text": "现在把 ETH 抵押到 DeFi 借贷协议借 USDC 风险大吗？",
+      "expected_match": true,
+      "expected_profile": "defi-lending"
+    },
+    {
+      "id": "hit_defi_lending_02",
+      "text": "Aave 和 Morpho 当前借贷利率、清算风险、资金利用率怎么比？",
+      "expected_match": true,
+      "expected_profile": "defi-lending"
+    }
+  ],
+  "must_miss": [
+    {
+      "id": "miss_general_token_01",
+      "text": "JWT token 过期了怎么处理？",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_token_02",
+      "text": "帮我设计一个 access token / refresh token 方案。",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_wallet_01",
+      "text": "iPhone 钱包 App 哪个好用？",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_wallet_02",
+      "text": "男士钱包推荐，预算 2000。",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_address_01",
+      "text": "帮我分析一下这个 IP 地址是不是恶意来源。",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_address_02",
+      "text": "这个邮箱地址格式对不对？",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_market_01",
+      "text": "当前股票市场的多空情况如何？",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_market_02",
+      "text": "最近美股有什么热点？",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_hot_01",
+      "text": "最近 AI 圈有什么热点？",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_hot_02",
+      "text": "最近互联网有什么热门产品？",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_arbitrage_01",
+      "text": "电商平台之间有什么套利机会？",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_arbitrage_02",
+      "text": "跨境贸易最近有什么套利空间？",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_news_01",
+      "text": "最近科技圈有什么消息？",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_code_01",
+      "text": "帮我分析一下这段 Python 代码。",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_code_02",
+      "text": "这个 API response 解析报错，帮我看看。",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_finance_01",
+      "text": "最近黄金适合买吗？",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_finance_02",
+      "text": "这个基金适合长期持有吗？",
+      "expected_match": false,
+      "expected_profile": ""
+    },
+    {
+      "id": "miss_general_social_01",
+      "text": "帮我分析一下这个小红书账号的运营策略。",
+      "expected_match": false,
+      "expected_profile": ""
+    }
+  ],
+  "borderline": [
+    {
+      "id": "borderline_01",
+      "text": "最近市场情绪怎么样？",
+      "note": "没有明确说 crypto，建议只统计"
+    },
+    {
+      "id": "borderline_02",
+      "text": "最近有什么热门币圈项目？",
+      "expected_match": true,
+      "expected_profile": "crypto-basic",
+      "note": "通常应命中，但 profile 可能在 crypto-basic 和 token-research 间波动"
+    },
+    {
+      "id": "borderline_03",
+      "text": "这个地址是不是大户地址？",
+      "note": "如果没有链上/钱包语境，可能不稳定"
+    },
+    {
+      "id": "borderline_04",
+      "text": "最近有没有套利机会？",
+      "note": "如果没说 crypto，可能误判成泛金融"
+    },
+    {
+      "id": "borderline_05",
+      "text": "最近有什么热门 Tokenizer 工具？",
+      "expected_match": false,
+      "note": "有 token 字样，但语义不是 crypto"
+    },
+    {
+      "id": "borderline_06",
+      "text": "钱包安全怎么做？",
+      "note": "可能是加密钱包，也可能是普通 App/账户安全"
+    },
+    {
+      "id": "borderline_07",
+      "text": "ETH 和 BTC 现在怎么看？",
+      "expected_match": true,
+      "expected_profile": "crypto-basic",
+      "note": "应命中 crypto-basic"
+    },
+    {
+      "id": "borderline_08",
+      "text": "最近链上有没有值得关注的地址？",
+      "expected_match": true,
+      "expected_profile": "crypto-basic",
+      "note": "应命中 crypto-basic"
+    }
+  ]
+}
