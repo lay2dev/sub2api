@@ -14,6 +14,7 @@ import (
 )
 
 const openRouterCryptoProfilePromptMaxChars = 4000
+const openRouterCryptoProfileDetectMaxAttempts = 2
 
 // CryptoProfileDetector classifies whether a request should be treated as a crypto/web3 profile request.
 type CryptoProfileDetector interface {
@@ -45,10 +46,22 @@ type openRouterChatMessage struct {
 }
 
 type openRouterChatCompletionRequest struct {
-	Model       string                  `json:"model"`
-	Messages    []openRouterChatMessage `json:"messages"`
-	Temperature float64                 `json:"temperature"`
-	MaxTokens   int                     `json:"max_tokens"`
+	Model          string                        `json:"model"`
+	Messages       []openRouterChatMessage       `json:"messages"`
+	Temperature    float64                       `json:"temperature"`
+	MaxTokens      int                           `json:"max_tokens"`
+	ResponseFormat openRouterResponseFormat      `json:"response_format"`
+}
+
+type openRouterResponseFormat struct {
+	Type       string                    `json:"type"`
+	JSONSchema openRouterJSONSchemaField `json:"json_schema"`
+}
+
+type openRouterJSONSchemaField struct {
+	Name   string                 `json:"name"`
+	Strict bool                   `json:"strict"`
+	Schema map[string]any         `json:"schema"`
 }
 
 type openRouterChatCompletionResponse struct {
@@ -124,9 +137,18 @@ func (d *OpenRouterCryptoProfileDetector) Detect(ctx context.Context, message st
 			{
 				Role: "system",
 				Content: "You classify whether a user request matches a crypto/web3 profile. " +
-					"Return only compact JSON: " +
-					"{\"match\":true|false,\"profile\":\"crypto-basic|token-research|uniswap|defi-lending|dex-routing|\"}. " +
+					"Return only compact JSON matching the provided schema. " +
+					"Use profile `none` when match is false. " +
 					"Mark true for blockchain, tokens, wallets, swaps, DEX routing, DeFi, onchain analysis, protocols, stablecoins, bridges, NFT, gas or chain-specific requests. " +
+					"Mark true for these Chinese crypto requests as well: " +
+					"`XX Token 适合买吗/怎么样（基本盘、团队、X 信息、安全、解锁信息）`, " +
+					"`当前市场的多空情况/巨鲸仓位`, " +
+					"`xxx 地址的分析`, " +
+					"`有什么资金套利的机会`, " +
+					"`Crypto 最近有什么消息/热点`, " +
+					"`最近有什么热门 Token`. " +
+					"Prefer `token-research` for token quality, token buying, hot token, unlock, team, security, or research-style questions. " +
+					"Use `crypto-basic` for market sentiment, whale positions, address analysis, arbitrage opportunities, and crypto news/hotspot questions. " +
 					"Mark false for general coding, productivity, or non-crypto uses of words like token or wallet. " +
 					"When true but no specialized profile is obvious, use crypto-basic.",
 			},
@@ -137,13 +159,64 @@ func (d *OpenRouterCryptoProfileDetector) Detect(ctx context.Context, message st
 		},
 		Temperature: 0,
 		MaxTokens:   64,
+		ResponseFormat: openRouterResponseFormat{
+			Type: "json_schema",
+			JSONSchema: openRouterJSONSchemaField{
+				Name:   "crypto_profile_match",
+				Strict: true,
+				Schema: openRouterCryptoProfileJSONSchema(),
+			},
+		},
 	}
 
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("marshal openrouter request: %w", err)
 	}
+	var lastErr error
+	for attempt := 1; attempt <= openRouterCryptoProfileDetectMaxAttempts; attempt++ {
+		match, err := d.detectOnce(ctx, body)
+		if err == nil {
+			match.Model = d.model
+			return match, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}
 
+func truncateCryptoProfilePrompt(message string) string {
+	if len(message) <= openRouterCryptoProfilePromptMaxChars {
+		return message
+	}
+	return message[:openRouterCryptoProfilePromptMaxChars]
+}
+
+func parseOpenRouterCryptoProfilePayload(content string) (*CryptoProfileMatchResult, error) {
+	trimmed := strings.TrimSpace(content)
+	trimmed = strings.TrimPrefix(trimmed, "```json")
+	trimmed = strings.TrimPrefix(trimmed, "```")
+	trimmed = strings.TrimSuffix(trimmed, "```")
+	trimmed = strings.TrimSpace(trimmed)
+
+	var payload openRouterCryptoProfilePayload
+	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+		return nil, fmt.Errorf("parse openrouter classifier response: %w", err)
+	}
+	if strings.EqualFold(strings.TrimSpace(payload.Profile), "none") {
+		payload.Profile = ""
+	}
+	if payload.Match && strings.TrimSpace(payload.Profile) == "" {
+		payload.Profile = "crypto-basic"
+	}
+
+	return &CryptoProfileMatchResult{
+		Matched: payload.Match,
+		Profile: strings.TrimSpace(payload.Profile),
+	}, nil
+}
+
+func (d *OpenRouterCryptoProfileDetector) detectOnce(ctx context.Context, body []byte) (*CryptoProfileMatchResult, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create openrouter request: %w", err)
@@ -176,38 +249,32 @@ func (d *OpenRouterCryptoProfileDetector) Detect(ctx context.Context, message st
 	}
 
 	content := strings.TrimSpace(completion.Choices[0].Message.Content)
-	match, err := parseOpenRouterCryptoProfilePayload(content)
-	if err != nil {
-		return nil, err
+	if content == "" {
+		return nil, fmt.Errorf("openrouter response content is empty")
 	}
-	match.Model = d.model
-	return match, nil
+	return parseOpenRouterCryptoProfilePayload(content)
 }
 
-func truncateCryptoProfilePrompt(message string) string {
-	if len(message) <= openRouterCryptoProfilePromptMaxChars {
-		return message
+func openRouterCryptoProfileJSONSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"match": map[string]any{
+				"type": "boolean",
+			},
+			"profile": map[string]any{
+				"type": "string",
+				"enum": []string{
+					"none",
+					"crypto-basic",
+					"token-research",
+					"uniswap",
+					"defi-lending",
+					"dex-routing",
+				},
+			},
+		},
+		"required":             []string{"match", "profile"},
+		"additionalProperties": false,
 	}
-	return message[:openRouterCryptoProfilePromptMaxChars]
-}
-
-func parseOpenRouterCryptoProfilePayload(content string) (*CryptoProfileMatchResult, error) {
-	trimmed := strings.TrimSpace(content)
-	trimmed = strings.TrimPrefix(trimmed, "```json")
-	trimmed = strings.TrimPrefix(trimmed, "```")
-	trimmed = strings.TrimSuffix(trimmed, "```")
-	trimmed = strings.TrimSpace(trimmed)
-
-	var payload openRouterCryptoProfilePayload
-	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
-		return nil, fmt.Errorf("parse openrouter classifier response: %w", err)
-	}
-	if payload.Match && strings.TrimSpace(payload.Profile) == "" {
-		payload.Profile = "crypto-basic"
-	}
-
-	return &CryptoProfileMatchResult{
-		Matched: payload.Match,
-		Profile: strings.TrimSpace(payload.Profile),
-	}, nil
 }
