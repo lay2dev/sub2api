@@ -32,6 +32,7 @@ type OpenAIGatewayHandler struct {
 	apiKeyService           *service.APIKeyService
 	usageRecordWorkerPool   *service.UsageRecordWorkerPool
 	errorPassthroughService *service.ErrorPassthroughService
+	cryptoProfileDetector   service.CryptoProfileDetector
 	concurrencyHelper       *ConcurrencyHelper
 	maxAccountSwitches      int
 	cfg                     *config.Config
@@ -55,6 +56,7 @@ func NewOpenAIGatewayHandler(
 	apiKeyService *service.APIKeyService,
 	usageRecordWorkerPool *service.UsageRecordWorkerPool,
 	errorPassthroughService *service.ErrorPassthroughService,
+	cryptoProfileDetector service.CryptoProfileDetector,
 	cfg *config.Config,
 ) *OpenAIGatewayHandler {
 	pingInterval := time.Duration(0)
@@ -71,6 +73,7 @@ func NewOpenAIGatewayHandler(
 		apiKeyService:           apiKeyService,
 		usageRecordWorkerPool:   usageRecordWorkerPool,
 		errorPassthroughService: errorPassthroughService,
+		cryptoProfileDetector:   cryptoProfileDetector,
 		concurrencyHelper:       NewConcurrencyHelper(concurrencyService, SSEPingFormatComment, pingInterval),
 		maxAccountSwitches:      maxAccountSwitches,
 		cfg:                     cfg,
@@ -570,6 +573,13 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		h.anthropicStreamingAwareError(c, status, code, message, streamStarted)
 		return
 	}
+	maybeLogCryptoProfileMatch(
+		c.Request.Context(),
+		reqLog,
+		h.cryptoProfileDetector,
+		extractCryptoProfileMessageTextFromMessagesBody(body),
+		EndpointMessages,
+	)
 
 	sessionHash := h.gatewayService.GenerateSessionHash(c, body)
 	promptCacheKey := h.gatewayService.ExtractSessionID(c, body)

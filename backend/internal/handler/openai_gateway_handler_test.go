@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -20,6 +21,65 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
+
+func TestOpenAIChatCompletions_SkipsCryptoDetectionWhenBillingFails(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model":"gpt-5.2",
+		"messages":[{"role":"user","content":"swap 10 ETH to USDC"}]
+	}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	groupID := int64(12)
+	apiKey := &service.APIKey{
+		ID:      99,
+		GroupID: &groupID,
+		User: &service.User{
+			ID:          7,
+			Concurrency: 1,
+		},
+		Group: &service.Group{
+			ID:       groupID,
+			Platform: service.PlatformOpenAI,
+		},
+	}
+	c.Set(string(middleware.ContextKeyAPIKey), apiKey)
+	c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{
+		UserID:      apiKey.User.ID,
+		Concurrency: apiKey.User.Concurrency,
+	})
+
+	cache := &concurrencyCacheMock{
+		acquireUserSlotFn: func(ctx context.Context, userID int64, maxConcurrency int, requestID string) (bool, error) {
+			return true, nil
+		},
+	}
+	detector := &stubCryptoProfileDetector{
+		enabled: true,
+		result: &service.CryptoProfileMatchResult{
+			Matched: true,
+			Profile: "dex-routing",
+			Model:   "openai/gpt-5.2",
+		},
+	}
+
+	handler := &OpenAIGatewayHandler{
+		gatewayService:        &service.OpenAIGatewayService{},
+		billingCacheService:   service.NewBillingCacheService(handlerBillingCacheStub{balance: 0}, nil, nil, nil, &config.Config{}),
+		apiKeyService:         &service.APIKeyService{},
+		cryptoProfileDetector: detector,
+		concurrencyHelper:     NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
+	}
+	defer handler.billingCacheService.Stop()
+
+	handler.ChatCompletions(c)
+
+	require.Empty(t, detector.gotText)
+	require.NotEqual(t, http.StatusOK, rec.Code)
+}
 
 func TestOpenAIHandleStreamingAwareError_JSONEscaping(t *testing.T) {
 	tests := []struct {

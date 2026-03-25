@@ -101,6 +101,13 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		h.handleStreamingAwareError(c, status, code, message, streamStarted)
 		return
 	}
+	maybeLogCryptoProfileMatch(
+		c.Request.Context(),
+		reqLog,
+		h.cryptoProfileDetector,
+		extractCryptoProfileMessageTextFromMessagesBody(body),
+		EndpointChatCompletions,
+	)
 
 	sessionHash := h.gatewayService.GenerateSessionHash(c, body)
 	promptCacheKey := h.gatewayService.ExtractSessionID(c, body)
