@@ -7,19 +7,20 @@ import (
 )
 
 type User struct {
-	ID            int64
-	Email         string
-	Username      string
-	Notes         string
-	PasswordHash  string
-	Role          string
-	Balance       float64
-	Concurrency   int
-	Status        string
-	AllowedGroups []int64
-	TokenVersion  int64 // Incremented on password change to invalidate existing tokens
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID             int64
+	Email          string
+	Username       string
+	Notes          string
+	PasswordHash   string
+	Role           string
+	Balance        float64
+	Concurrency    int
+	Status         string
+	BindingAddress string
+	AllowedGroups  []int64
+	TokenVersion   int64 // Incremented on password change to invalidate existing tokens
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]rateMultiplier

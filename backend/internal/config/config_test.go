@@ -299,6 +299,24 @@ func TestLoadDefaultServerMode(t *testing.T) {
 	}
 }
 
+func TestLoadWalletBindingMnemonicFromEnv(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("WALLET_BINDING_MNEMONIC", "test test test test test test test test test test test junk")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, "test test test test test test test test test test test junk", cfg.Wallet.BindingMnemonic)
+}
+
+func TestLoadRejectsInvalidWalletBindingMnemonic(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("WALLET_BINDING_MNEMONIC", "not a valid mnemonic")
+
+	_, err := Load()
+	require.Error(t, err)
+	require.ErrorContains(t, err, "wallet.binding_mnemonic")
+}
+
 func TestLoadDefaultJWTAccessTokenExpireMinutes(t *testing.T) {
 	resetViperWithJWTSecret(t)
 

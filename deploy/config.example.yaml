@@ -826,6 +826,20 @@ totp:
   encryption_key: ""
 
 # =============================================================================
+# Wallet Binding Configuration
+# 绑定地址配置
+# =============================================================================
+wallet:
+  # Optional server-side mnemonic used to derive a deterministic EVM binding
+  # address for each newly registered user.
+  # 可选：服务端助记词，用于为每个新注册用户派生稳定的 EVM 绑定地址。
+  #
+  # The server stores only the derived address on the user record and does not
+  # store a per-user mnemonic.
+  # 服务端只会在用户记录上保存派生后的地址，不会保存用户助记词。
+  binding_mnemonic: ""
+
+# =============================================================================
 # LinuxDo Connect OAuth Login (SSO)
 # LinuxDo Connect OAuth 登录（用于 Sub2API 用户登录）
 # =============================================================================

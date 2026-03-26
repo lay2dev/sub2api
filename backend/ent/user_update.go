@@ -160,6 +160,20 @@ func (_u *UserUpdate) SetNillableStatus(v *string) *UserUpdate {
 	return _u
 }
 
+// SetBindingAddress sets the "binding_address" field.
+func (_u *UserUpdate) SetBindingAddress(v string) *UserUpdate {
+	_u.mutation.SetBindingAddress(v)
+	return _u
+}
+
+// SetNillableBindingAddress sets the "binding_address" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableBindingAddress(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetBindingAddress(*v)
+	}
+	return _u
+}
+
 // SetUsername sets the "username" field.
 func (_u *UserUpdate) SetUsername(v string) *UserUpdate {
 	_u.mutation.SetUsername(v)
@@ -677,6 +691,11 @@ func (_u *UserUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "User.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.BindingAddress(); ok {
+		if err := user.BindingAddressValidator(v); err != nil {
+			return &ValidationError{Name: "binding_address", err: fmt.Errorf(`ent: validator failed for field "User.binding_address": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Username(); ok {
 		if err := user.UsernameValidator(v); err != nil {
 			return &ValidationError{Name: "username", err: fmt.Errorf(`ent: validator failed for field "User.username": %w`, err)}
@@ -729,6 +748,9 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(user.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BindingAddress(); ok {
+		_spec.SetField(user.FieldBindingAddress, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Username(); ok {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)
@@ -1324,6 +1346,20 @@ func (_u *UserUpdateOne) SetNillableStatus(v *string) *UserUpdateOne {
 	return _u
 }
 
+// SetBindingAddress sets the "binding_address" field.
+func (_u *UserUpdateOne) SetBindingAddress(v string) *UserUpdateOne {
+	_u.mutation.SetBindingAddress(v)
+	return _u
+}
+
+// SetNillableBindingAddress sets the "binding_address" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableBindingAddress(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetBindingAddress(*v)
+	}
+	return _u
+}
+
 // SetUsername sets the "username" field.
 func (_u *UserUpdateOne) SetUsername(v string) *UserUpdateOne {
 	_u.mutation.SetUsername(v)
@@ -1854,6 +1890,11 @@ func (_u *UserUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "User.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.BindingAddress(); ok {
+		if err := user.BindingAddressValidator(v); err != nil {
+			return &ValidationError{Name: "binding_address", err: fmt.Errorf(`ent: validator failed for field "User.binding_address": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Username(); ok {
 		if err := user.UsernameValidator(v); err != nil {
 			return &ValidationError{Name: "username", err: fmt.Errorf(`ent: validator failed for field "User.username": %w`, err)}
@@ -1923,6 +1964,9 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(user.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BindingAddress(); ok {
+		_spec.SetField(user.FieldBindingAddress, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Username(); ok {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)

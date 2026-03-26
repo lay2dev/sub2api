@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
+	"github.com/tyler-smith/go-bip39"
 )
 
 const (
@@ -78,6 +79,7 @@ type Config struct {
 	Concurrency             ConcurrencyConfig             `mapstructure:"concurrency"`
 	TokenRefresh            TokenRefreshConfig            `mapstructure:"token_refresh"`
 	Sora                    SoraConfig                    `mapstructure:"sora"`
+	Wallet                  WalletConfig                  `mapstructure:"wallet"`
 	RunMode                 string                        `mapstructure:"run_mode" yaml:"run_mode"`
 	Timezone                string                        `mapstructure:"timezone"` // e.g. "Asia/Shanghai", "UTC"
 	Gemini                  GeminiConfig                  `mapstructure:"gemini"`
@@ -894,6 +896,10 @@ type DefaultConfig struct {
 	RateMultiplier  float64 `mapstructure:"rate_multiplier"`
 }
 
+type WalletConfig struct {
+	BindingMnemonic string `mapstructure:"binding_mnemonic"`
+}
+
 type RateLimitConfig struct {
 	OverloadCooldownMinutes int `mapstructure:"overload_cooldown_minutes"`  // 529过载冷却时间(分钟)
 	OAuth401CooldownMinutes int `mapstructure:"oauth_401_cooldown_minutes"` // OAuth 401临时不可调度冷却(分钟)
@@ -1066,6 +1072,7 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	cfg.Log.Environment = strings.TrimSpace(cfg.Log.Environment)
 	cfg.Log.StacktraceLevel = strings.ToLower(strings.TrimSpace(cfg.Log.StacktraceLevel))
 	cfg.Log.Output.FilePath = strings.TrimSpace(cfg.Log.Output.FilePath)
+	cfg.Wallet.BindingMnemonic = strings.TrimSpace(cfg.Wallet.BindingMnemonic)
 
 	// 兼容旧键 gateway.openai_ws.sticky_previous_response_ttl_seconds。
 	// 新键未配置（<=0）时回退旧键；新键优先。
@@ -1282,6 +1289,7 @@ func setDefaults() {
 	viper.SetDefault("default.user_balance", 0)
 	viper.SetDefault("default.api_key_prefix", "sk-")
 	viper.SetDefault("default.rate_multiplier", 1.0)
+	viper.SetDefault("wallet.binding_mnemonic", "")
 
 	// RateLimit
 	viper.SetDefault("rate_limit.overload_cooldown_minutes", 10)
@@ -1649,6 +1657,9 @@ func (c *Config) Validate() error {
 	}
 	if c.JWT.RefreshWindowMinutes < 0 {
 		return fmt.Errorf("jwt.refresh_window_minutes must be non-negative")
+	}
+	if mnemonic := strings.TrimSpace(c.Wallet.BindingMnemonic); mnemonic != "" && !bip39.IsMnemonicValid(mnemonic) {
+		return fmt.Errorf("wallet.binding_mnemonic must be a valid BIP39 mnemonic")
 	}
 	if c.Security.CSP.Enabled && strings.TrimSpace(c.Security.CSP.Policy) == "" {
 		return fmt.Errorf("security.csp.policy is required when CSP is enabled")

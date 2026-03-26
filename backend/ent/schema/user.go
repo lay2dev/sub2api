@@ -1,6 +1,9 @@
 package schema
 
 import (
+	"fmt"
+	"regexp"
+
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 
@@ -12,6 +15,8 @@ import (
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 )
+
+var evmBindingAddressPattern = regexp.MustCompile("^0x[0-9a-f]{40}$")
 
 // User holds the schema definition for the User entity.
 type User struct {
@@ -52,6 +57,15 @@ func (User) Fields() []ent.Field {
 		field.String("status").
 			MaxLen(20).
 			Default(domain.StatusActive),
+		field.String("binding_address").
+			MaxLen(42).
+			Validate(func(value string) error {
+				if value == "" || evmBindingAddressPattern.MatchString(value) {
+					return nil
+				}
+				return fmt.Errorf("must be empty or a lowercase 0x-prefixed EVM address")
+			}).
+			Default(""),
 
 		// Optional profile fields (added later; default '' in DB migration)
 		field.String("username").

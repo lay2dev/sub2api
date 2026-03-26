@@ -21333,6 +21333,7 @@ type UserMutation struct {
 	concurrency                   *int
 	addconcurrency                *int
 	status                        *string
+	binding_address               *string
 	username                      *string
 	notes                         *string
 	totp_secret_encrypted         *string
@@ -21848,6 +21849,42 @@ func (m *UserMutation) OldStatus(ctx context.Context) (v string, err error) {
 // ResetStatus resets all changes to the "status" field.
 func (m *UserMutation) ResetStatus() {
 	m.status = nil
+}
+
+// SetBindingAddress sets the "binding_address" field.
+func (m *UserMutation) SetBindingAddress(s string) {
+	m.binding_address = &s
+}
+
+// BindingAddress returns the value of the "binding_address" field in the mutation.
+func (m *UserMutation) BindingAddress() (r string, exists bool) {
+	v := m.binding_address
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBindingAddress returns the old "binding_address" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldBindingAddress(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBindingAddress is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBindingAddress requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBindingAddress: %w", err)
+	}
+	return oldValue.BindingAddress, nil
+}
+
+// ResetBindingAddress resets all changes to the "binding_address" field.
+func (m *UserMutation) ResetBindingAddress() {
+	m.binding_address = nil
 }
 
 // SetUsername sets the "username" field.
@@ -22688,7 +22725,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 16)
+	fields := make([]string, 0, 17)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}
@@ -22715,6 +22752,9 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.status != nil {
 		fields = append(fields, user.FieldStatus)
+	}
+	if m.binding_address != nil {
+		fields = append(fields, user.FieldBindingAddress)
 	}
 	if m.username != nil {
 		fields = append(fields, user.FieldUsername)
@@ -22763,6 +22803,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Concurrency()
 	case user.FieldStatus:
 		return m.Status()
+	case user.FieldBindingAddress:
+		return m.BindingAddress()
 	case user.FieldUsername:
 		return m.Username()
 	case user.FieldNotes:
@@ -22804,6 +22846,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldConcurrency(ctx)
 	case user.FieldStatus:
 		return m.OldStatus(ctx)
+	case user.FieldBindingAddress:
+		return m.OldBindingAddress(ctx)
 	case user.FieldUsername:
 		return m.OldUsername(ctx)
 	case user.FieldNotes:
@@ -22889,6 +22933,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
+		return nil
+	case user.FieldBindingAddress:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBindingAddress(v)
 		return nil
 	case user.FieldUsername:
 		v, ok := value.(string)
@@ -23086,6 +23137,9 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldStatus:
 		m.ResetStatus()
+		return nil
+	case user.FieldBindingAddress:
+		m.ResetBindingAddress()
 		return nil
 	case user.FieldUsername:
 		m.ResetUsername()

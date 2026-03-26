@@ -100,6 +100,11 @@ func Status(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldStatus, v))
 }
 
+// BindingAddress applies equality check predicate on the "binding_address" field. It's identical to BindingAddressEQ.
+func BindingAddress(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldBindingAddress, v))
+}
+
 // Username applies equality check predicate on the "username" field. It's identical to UsernameEQ.
 func Username(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldUsername, v))
@@ -603,6 +608,71 @@ func StatusEqualFold(v string) predicate.User {
 // StatusContainsFold applies the ContainsFold predicate on the "status" field.
 func StatusContainsFold(v string) predicate.User {
 	return predicate.User(sql.FieldContainsFold(FieldStatus, v))
+}
+
+// BindingAddressEQ applies the EQ predicate on the "binding_address" field.
+func BindingAddressEQ(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldBindingAddress, v))
+}
+
+// BindingAddressNEQ applies the NEQ predicate on the "binding_address" field.
+func BindingAddressNEQ(v string) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldBindingAddress, v))
+}
+
+// BindingAddressIn applies the In predicate on the "binding_address" field.
+func BindingAddressIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldIn(FieldBindingAddress, vs...))
+}
+
+// BindingAddressNotIn applies the NotIn predicate on the "binding_address" field.
+func BindingAddressNotIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldBindingAddress, vs...))
+}
+
+// BindingAddressGT applies the GT predicate on the "binding_address" field.
+func BindingAddressGT(v string) predicate.User {
+	return predicate.User(sql.FieldGT(FieldBindingAddress, v))
+}
+
+// BindingAddressGTE applies the GTE predicate on the "binding_address" field.
+func BindingAddressGTE(v string) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldBindingAddress, v))
+}
+
+// BindingAddressLT applies the LT predicate on the "binding_address" field.
+func BindingAddressLT(v string) predicate.User {
+	return predicate.User(sql.FieldLT(FieldBindingAddress, v))
+}
+
+// BindingAddressLTE applies the LTE predicate on the "binding_address" field.
+func BindingAddressLTE(v string) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldBindingAddress, v))
+}
+
+// BindingAddressContains applies the Contains predicate on the "binding_address" field.
+func BindingAddressContains(v string) predicate.User {
+	return predicate.User(sql.FieldContains(FieldBindingAddress, v))
+}
+
+// BindingAddressHasPrefix applies the HasPrefix predicate on the "binding_address" field.
+func BindingAddressHasPrefix(v string) predicate.User {
+	return predicate.User(sql.FieldHasPrefix(FieldBindingAddress, v))
+}
+
+// BindingAddressHasSuffix applies the HasSuffix predicate on the "binding_address" field.
+func BindingAddressHasSuffix(v string) predicate.User {
+	return predicate.User(sql.FieldHasSuffix(FieldBindingAddress, v))
+}
+
+// BindingAddressEqualFold applies the EqualFold predicate on the "binding_address" field.
+func BindingAddressEqualFold(v string) predicate.User {
+	return predicate.User(sql.FieldEqualFold(FieldBindingAddress, v))
+}
+
+// BindingAddressContainsFold applies the ContainsFold predicate on the "binding_address" field.
+func BindingAddressContainsFold(v string) predicate.User {
+	return predicate.User(sql.FieldContainsFold(FieldBindingAddress, v))
 }
 
 // UsernameEQ applies the EQ predicate on the "username" field.

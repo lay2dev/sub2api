@@ -385,12 +385,17 @@ jwt:
   secret: "change-this-to-a-secure-random-string"
   expire_hour: 24
 
+wallet:
+  binding_mnemonic: ""
+
 default:
   user_concurrency: 5
   user_balance: 0
   api_key_prefix: "sk-"
   rate_multiplier: 1.0
 ```
+
+If `wallet.binding_mnemonic` is configured with a valid BIP39 mnemonic, each newly registered user will receive a deterministic EVM `binding_address` derived from that mnemonic and the user's ID. The server stores only the derived address, not a per-user mnemonic.
 
 ### Sora Status (Temporarily Unavailable)
 
