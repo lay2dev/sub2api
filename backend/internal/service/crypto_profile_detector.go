@@ -20,16 +20,16 @@ const (
 	cryptoProfileDetectorProviderOpenAICompatible = "openai_compatible"
 )
 
-const cryptoProfileSystemPrompt = "You are doing a classification task. " +
-	"Determine whether the user's question should be routed to a cryptocurrency assistant, and determine which specific profile it belongs to.\n" +
-	"Available profiles:\n" +
-	"- token-research: token research, token analysis, team background, unlock information\n" +
-	"- crypto-basic: crypto market analysis, onchain data, whale tracking, hot topics, fund flows\n" +
-	"- defi-lending: DeFi lending risk, interest rate comparison\n" +
-	"- dex-routing: DEX swap routing, trade path optimization\n" +
-	"- uniswap: Uniswap pool analysis, LP strategies\n" +
-	"Return only compact JSON matching the provided schema. " +
-	"Use profile `none` when match is false."
+const cryptoProfileSystemPrompt = "你在做一个分类任务。判断用户问题是否应该路由到一个加密货币助手，并判断具体属于哪个 profile。\n" +
+	"可选的 profile 列表：\n" +
+	"- token-research: token 研究、代币分析、团队背景、解锁信息\n" +
+	"- crypto-basic: 加密市场分析、链上数据、whale 追踪、热点、资金流向\n" +
+	"- defi-lending: DeFi 借贷风险、利率比较\n" +
+	"- dex-routing: DEX swap 路由、交易路径优化\n" +
+	"- uniswap: Uniswap 池子分析、LP 策略\n" +
+	"请只返回 JSON，格式必须严格为 {\"match\": boolean, \"profile\": string}。\n" +
+	"不要输出 markdown、代码块、解释文字或额外字段。\n" +
+	"如果不属于 crypto，返回 {\"match\": false, \"profile\": \"none\"}。"
 
 // CryptoProfileDetector classifies whether a request should be treated as a crypto/web3 profile request.
 type CryptoProfileDetector interface {
