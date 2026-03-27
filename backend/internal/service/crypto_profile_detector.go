@@ -20,6 +20,17 @@ const (
 	cryptoProfileDetectorProviderOpenAICompatible = "openai_compatible"
 )
 
+const cryptoProfileSystemPrompt = "You are doing a classification task. " +
+	"Determine whether the user's question should be routed to a cryptocurrency assistant, and determine which specific profile it belongs to.\n" +
+	"Available profiles:\n" +
+	"- token-research: token research, token analysis, team background, unlock information\n" +
+	"- crypto-basic: crypto market analysis, onchain data, whale tracking, hot topics, fund flows\n" +
+	"- defi-lending: DeFi lending risk, interest rate comparison\n" +
+	"- dex-routing: DEX swap routing, trade path optimization\n" +
+	"- uniswap: Uniswap pool analysis, LP strategies\n" +
+	"Return only compact JSON matching the provided schema. " +
+	"Use profile `none` when match is false."
+
 // CryptoProfileDetector classifies whether a request should be treated as a crypto/web3 profile request.
 type CryptoProfileDetector interface {
 	Enabled() bool
@@ -155,14 +166,7 @@ func (d *OpenRouterCryptoProfileDetector) Detect(ctx context.Context, message st
 		Messages: []openRouterChatMessage{
 			{
 				Role: "system",
-				Content: "You classify whether a user request matches a crypto/web3 profile. " +
-					"Return only compact JSON matching the provided schema. " +
-					"Use profile `none` when match is false. " +
-					"Mark true for blockchain, tokens, wallets, swaps, DEX routing, DeFi, onchain analysis, protocols, stablecoins, bridges, NFT, gas or chain-specific requests. " +
-					"Prefer `token-research` for token quality, token buying, hot token, unlock, team, security, or research-style questions. " +
-					"Use `crypto-basic` for market sentiment, whale positions, address analysis, arbitrage opportunities, and crypto news/hotspot questions. " +
-					"Mark false for general coding, productivity, or non-crypto uses of words like token or wallet. " +
-					"When true but no specialized profile is obvious, use crypto-basic.",
+				Content: cryptoProfileSystemPrompt,
 			},
 			{
 				Role:    "user",

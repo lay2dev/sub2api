@@ -22,6 +22,17 @@ func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 func TestOpenRouterCryptoProfileDetectorDetect_Match(t *testing.T) {
 	t.Helper()
 
+	expectedPrompt := "You are doing a classification task. " +
+		"Determine whether the user's question should be routed to a cryptocurrency assistant, and determine which specific profile it belongs to.\n" +
+		"Available profiles:\n" +
+		"- token-research: token research, token analysis, team background, unlock information\n" +
+		"- crypto-basic: crypto market analysis, onchain data, whale tracking, hot topics, fund flows\n" +
+		"- defi-lending: DeFi lending risk, interest rate comparison\n" +
+		"- dex-routing: DEX swap routing, trade path optimization\n" +
+		"- uniswap: Uniswap pool analysis, LP strategies\n" +
+		"Return only compact JSON matching the provided schema. " +
+		"Use profile `none` when match is false."
+
 	var capturedAuth string
 	var capturedReferer string
 	var capturedTitle string
@@ -83,7 +94,7 @@ func TestOpenRouterCryptoProfileDetectorDetect_Match(t *testing.T) {
 	require.True(t, ok)
 	systemContent, ok := systemMessage["content"].(string)
 	require.True(t, ok)
-	require.NotContains(t, systemContent, "Mark true for these Chinese crypto requests as well:")
+	require.Equal(t, expectedPrompt, systemContent)
 }
 
 func TestOpenRouterCryptoProfileDetectorDetect_UsesStructuredOutputsAndRetriesOnInvalidJSON(t *testing.T) {
