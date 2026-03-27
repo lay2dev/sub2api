@@ -15,6 +15,10 @@ import (
 
 const openRouterCryptoProfilePromptMaxChars = 4000
 const openRouterCryptoProfileDetectMaxAttempts = 2
+const (
+	cryptoProfileDetectorProviderOpenRouter       = "openrouter"
+	cryptoProfileDetectorProviderOpenAICompatible = "openai_compatible"
+)
 
 // CryptoProfileDetector classifies whether a request should be treated as a crypto/web3 profile request.
 type CryptoProfileDetector interface {
@@ -29,9 +33,10 @@ type CryptoProfileMatchResult struct {
 	Model   string
 }
 
-// OpenRouterCryptoProfileDetector calls OpenRouter Chat Completions for profile classification.
+// OpenRouterCryptoProfileDetector calls OpenRouter or OpenAI-compatible Chat Completions for profile classification.
 type OpenRouterCryptoProfileDetector struct {
 	enabled     bool
+	provider    string
 	endpoint    string
 	apiKey      string
 	model       string
@@ -46,11 +51,11 @@ type openRouterChatMessage struct {
 }
 
 type openRouterChatCompletionRequest struct {
-	Model          string                        `json:"model"`
-	Messages       []openRouterChatMessage       `json:"messages"`
-	Temperature    float64                       `json:"temperature"`
-	MaxTokens      int                           `json:"max_tokens"`
-	ResponseFormat openRouterResponseFormat      `json:"response_format"`
+	Model          string                   `json:"model"`
+	Messages       []openRouterChatMessage  `json:"messages"`
+	Temperature    float64                  `json:"temperature"`
+	MaxTokens      int                      `json:"max_tokens"`
+	ResponseFormat openRouterResponseFormat `json:"response_format"`
 }
 
 type openRouterResponseFormat struct {
@@ -59,9 +64,9 @@ type openRouterResponseFormat struct {
 }
 
 type openRouterJSONSchemaField struct {
-	Name   string                 `json:"name"`
-	Strict bool                   `json:"strict"`
-	Schema map[string]any         `json:"schema"`
+	Name   string         `json:"name"`
+	Strict bool           `json:"strict"`
+	Schema map[string]any `json:"schema"`
 }
 
 type openRouterChatCompletionResponse struct {
@@ -93,8 +98,10 @@ func NewOpenRouterCryptoProfileDetector(cfg *config.Config) *OpenRouterCryptoPro
 		timeoutSeconds = 3
 	}
 
-	endpoint := strings.TrimSpace(detectCfg.Endpoint)
-	if endpoint == "" {
+	provider, validProvider := normalizeCryptoProfileDetectorProvider(detectCfg.Provider)
+	rawEndpoint := strings.TrimSpace(detectCfg.Endpoint)
+	endpoint := rawEndpoint
+	if provider == cryptoProfileDetectorProviderOpenRouter && endpoint == "" {
 		endpoint = "https://openrouter.ai/api/v1/chat/completions"
 	}
 	model := strings.TrimSpace(detectCfg.Model)
@@ -102,16 +109,28 @@ func NewOpenRouterCryptoProfileDetector(cfg *config.Config) *OpenRouterCryptoPro
 		model = "qwen/qwen3.5-122b-a10b"
 	}
 
+	apiKey := strings.TrimSpace(detectCfg.APIKey)
+	if provider == cryptoProfileDetectorProviderOpenRouter && apiKey == "" {
+		apiKey = strings.TrimSpace(detectCfg.OpenRouterAPIKey)
+	}
+
+	detector.provider = provider
 	detector.endpoint = endpoint
-	detector.apiKey = strings.TrimSpace(detectCfg.OpenRouterAPIKey)
+	detector.apiKey = apiKey
 	detector.model = model
 	detector.httpReferer = strings.TrimSpace(detectCfg.HTTPReferer)
 	detector.title = strings.TrimSpace(detectCfg.Title)
 	detector.httpClient = &http.Client{Timeout: time.Duration(timeoutSeconds) * time.Second}
-	detector.enabled = detectCfg.Enabled && detector.apiKey != ""
+	detector.enabled = detectCfg.Enabled && validProvider && detector.endpoint != "" && detector.apiKey != ""
 
+	if detectCfg.Enabled && !validProvider {
+		logger.LegacyPrintf("service.crypto_profile_detector", "crypto profile detection enabled but provider %q is unsupported; detector disabled", strings.TrimSpace(detectCfg.Provider))
+	}
+	if detectCfg.Enabled && detector.endpoint == "" {
+		logger.LegacyPrintf("service.crypto_profile_detector", "crypto profile detection enabled but endpoint is empty for provider %q; detector disabled", detector.provider)
+	}
 	if detectCfg.Enabled && detector.apiKey == "" {
-		logger.LegacyPrintf("service.crypto_profile_detector", "OpenRouter crypto profile detection enabled but openrouter_api_key is empty; detector disabled")
+		logger.LegacyPrintf("service.crypto_profile_detector", "crypto profile detection enabled but api key is empty for provider %q; detector disabled", detector.provider)
 	}
 
 	return detector
@@ -140,13 +159,6 @@ func (d *OpenRouterCryptoProfileDetector) Detect(ctx context.Context, message st
 					"Return only compact JSON matching the provided schema. " +
 					"Use profile `none` when match is false. " +
 					"Mark true for blockchain, tokens, wallets, swaps, DEX routing, DeFi, onchain analysis, protocols, stablecoins, bridges, NFT, gas or chain-specific requests. " +
-					"Mark true for these Chinese crypto requests as well: " +
-					"`XX Token 适合买吗/怎么样（基本盘、团队、X 信息、安全、解锁信息）`, " +
-					"`当前市场的多空情况/巨鲸仓位`, " +
-					"`xxx 地址的分析`, " +
-					"`有什么资金套利的机会`, " +
-					"`Crypto 最近有什么消息/热点`, " +
-					"`最近有什么热门 Token`. " +
 					"Prefer `token-research` for token quality, token buying, hot token, unlock, team, security, or research-style questions. " +
 					"Use `crypto-basic` for market sentiment, whale positions, address analysis, arbitrage opportunities, and crypto news/hotspot questions. " +
 					"Mark false for general coding, productivity, or non-crypto uses of words like token or wallet. " +
@@ -192,6 +204,17 @@ func truncateCryptoProfilePrompt(message string) string {
 	return message[:openRouterCryptoProfilePromptMaxChars]
 }
 
+func normalizeCryptoProfileDetectorProvider(raw string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", cryptoProfileDetectorProviderOpenRouter:
+		return cryptoProfileDetectorProviderOpenRouter, true
+	case cryptoProfileDetectorProviderOpenAICompatible, "openai-compatible":
+		return cryptoProfileDetectorProviderOpenAICompatible, true
+	default:
+		return strings.ToLower(strings.TrimSpace(raw)), false
+	}
+}
+
 func parseOpenRouterCryptoProfilePayload(content string) (*CryptoProfileMatchResult, error) {
 	trimmed := strings.TrimSpace(content)
 	trimmed = strings.TrimPrefix(trimmed, "```json")
@@ -223,10 +246,10 @@ func (d *OpenRouterCryptoProfileDetector) detectOnce(ctx context.Context, body [
 	}
 	req.Header.Set("Authorization", "Bearer "+d.apiKey)
 	req.Header.Set("Content-Type", "application/json")
-	if d.httpReferer != "" {
+	if d.provider == cryptoProfileDetectorProviderOpenRouter && d.httpReferer != "" {
 		req.Header.Set("HTTP-Referer", d.httpReferer)
 	}
-	if d.title != "" {
+	if d.provider == cryptoProfileDetectorProviderOpenRouter && d.title != "" {
 		req.Header.Set("X-Title", d.title)
 	}
 

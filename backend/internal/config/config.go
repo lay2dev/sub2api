@@ -377,7 +377,7 @@ type GatewayConfig struct {
 	// OpenAIPassthroughAllowTimeoutHeaders: OpenAI 透传模式是否放行客户端超时头
 	// 关闭（默认）可避免 x-stainless-timeout 等头导致上游提前断流。
 	OpenAIPassthroughAllowTimeoutHeaders bool `mapstructure:"openai_passthrough_allow_timeout_headers"`
-	// CryptoProfileDetection: 基于 OpenRouter 的 crypto/web3 profile 识别
+	// CryptoProfileDetection: 基于 OpenRouter 或 OpenAI-compatible 的 crypto/web3 profile 识别
 	CryptoProfileDetection CryptoProfileDetectionConfig `mapstructure:"crypto_profile_detection"`
 	// OpenAIWS: OpenAI Responses WebSocket 配置（默认开启，可按需回滚到 HTTP）
 	OpenAIWS GatewayOpenAIWSConfig `mapstructure:"openai_ws"`
@@ -471,19 +471,23 @@ type GatewayConfig struct {
 	UserMessageQueue UserMessageQueueConfig `mapstructure:"user_message_queue"`
 }
 
-// CryptoProfileDetectionConfig 配置基于 OpenRouter 的 crypto/web3 profile 识别。
+// CryptoProfileDetectionConfig 配置基于 OpenRouter 或 OpenAI-compatible 的 crypto/web3 profile 识别。
 // 仅用于入口判定和结构化日志，不改变当前请求的转发目标。
 type CryptoProfileDetectionConfig struct {
 	Enabled bool `mapstructure:"enabled"`
-	// Endpoint 为完整的 OpenRouter Chat Completions URL。
+	// Provider 支持 openrouter / openai_compatible。
+	Provider string `mapstructure:"provider"`
+	// Endpoint 为完整的 Chat Completions URL。
 	Endpoint string `mapstructure:"endpoint"`
-	// OpenRouterAPIKey 建议通过环境变量注入，避免写入明文配置文件。
+	// APIKey 为通用首选密钥字段。
+	APIKey string `mapstructure:"api_key"`
+	// OpenRouterAPIKey 为向后兼容字段；当 provider=openrouter 且 api_key 为空时会回退使用。
 	OpenRouterAPIKey string `mapstructure:"openrouter_api_key"`
-	// Model 为 OpenRouter 路由模型标识，例如 qwen/qwen3.5-122b-a10b。
+	// Model 为分类模型标识，例如 qwen/qwen3.5-122b-a10b。
 	Model string `mapstructure:"model"`
 	// TimeoutSeconds 为检测请求的总超时。
 	TimeoutSeconds int `mapstructure:"timeout_seconds"`
-	// HTTPReferer / Title 为 OpenRouter 可选归因头。
+	// HTTPReferer / Title 为 OpenRouter 可选归因头；openai_compatible provider 不发送。
 	HTTPReferer string `mapstructure:"http_referer"`
 	Title       string `mapstructure:"title"`
 }
@@ -1354,7 +1358,9 @@ func setDefaults() {
 	viper.SetDefault("gateway.force_codex_cli", false)
 	viper.SetDefault("gateway.openai_passthrough_allow_timeout_headers", false)
 	viper.SetDefault("gateway.crypto_profile_detection.enabled", false)
-	viper.SetDefault("gateway.crypto_profile_detection.endpoint", "https://openrouter.ai/api/v1/chat/completions")
+	viper.SetDefault("gateway.crypto_profile_detection.provider", "openrouter")
+	viper.SetDefault("gateway.crypto_profile_detection.endpoint", "")
+	viper.SetDefault("gateway.crypto_profile_detection.api_key", "")
 	viper.SetDefault("gateway.crypto_profile_detection.openrouter_api_key", "")
 	viper.SetDefault("gateway.crypto_profile_detection.model", "qwen/qwen3.5-122b-a10b")
 	viper.SetDefault("gateway.crypto_profile_detection.timeout_seconds", 3)

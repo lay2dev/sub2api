@@ -14,8 +14,8 @@ for arg in "$@"; do
   fi
 done
 
-if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
-  echo "OPENROUTER_API_KEY is required"
+if [[ -z "${CRYPTO_PROFILE_DETECTOR_API_KEY:-}" && -z "${OPENROUTER_API_KEY:-}" ]]; then
+  echo "CRYPTO_PROFILE_DETECTOR_API_KEY or OPENROUTER_API_KEY is required"
   exit 1
 fi
 

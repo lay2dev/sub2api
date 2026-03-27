@@ -158,6 +158,47 @@ func TestLoadDefaultOpenAIWSConfig(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultCryptoProfileDetectionConfig(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.Gateway.CryptoProfileDetection.Provider != "openrouter" {
+		t.Fatalf("Gateway.CryptoProfileDetection.Provider = %q, want %q", cfg.Gateway.CryptoProfileDetection.Provider, "openrouter")
+	}
+	if cfg.Gateway.CryptoProfileDetection.Endpoint != "" {
+		t.Fatalf("Gateway.CryptoProfileDetection.Endpoint = %q, want empty", cfg.Gateway.CryptoProfileDetection.Endpoint)
+	}
+	if cfg.Gateway.CryptoProfileDetection.APIKey != "" {
+		t.Fatalf("Gateway.CryptoProfileDetection.APIKey = %q, want empty", cfg.Gateway.CryptoProfileDetection.APIKey)
+	}
+}
+
+func TestLoadCryptoProfileDetectionConfigFromEnv(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("GATEWAY_CRYPTO_PROFILE_DETECTION_PROVIDER", "openai_compatible")
+	t.Setenv("GATEWAY_CRYPTO_PROFILE_DETECTION_ENDPOINT", "https://openai-compatible.test/v1/chat/completions")
+	t.Setenv("GATEWAY_CRYPTO_PROFILE_DETECTION_API_KEY", "detector-key")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.Gateway.CryptoProfileDetection.Provider != "openai_compatible" {
+		t.Fatalf("Gateway.CryptoProfileDetection.Provider = %q, want %q", cfg.Gateway.CryptoProfileDetection.Provider, "openai_compatible")
+	}
+	if cfg.Gateway.CryptoProfileDetection.Endpoint != "https://openai-compatible.test/v1/chat/completions" {
+		t.Fatalf("Gateway.CryptoProfileDetection.Endpoint = %q, want openai-compatible endpoint", cfg.Gateway.CryptoProfileDetection.Endpoint)
+	}
+	if cfg.Gateway.CryptoProfileDetection.APIKey != "detector-key" {
+		t.Fatalf("Gateway.CryptoProfileDetection.APIKey = %q, want %q", cfg.Gateway.CryptoProfileDetection.APIKey, "detector-key")
+	}
+}
+
 func TestLoadOpenAIWSStickyTTLCompatibility(t *testing.T) {
 	resetViperWithJWTSecret(t)
 	t.Setenv("GATEWAY_OPENAI_WS_STICKY_RESPONSE_ID_TTL_SECONDS", "0")

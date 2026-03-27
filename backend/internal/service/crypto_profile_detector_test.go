@@ -79,6 +79,11 @@ func TestOpenRouterCryptoProfileDetectorDetect_Match(t *testing.T) {
 	messages, ok := capturedBody["messages"].([]any)
 	require.True(t, ok)
 	require.Len(t, messages, 2)
+	systemMessage, ok := messages[0].(map[string]any)
+	require.True(t, ok)
+	systemContent, ok := systemMessage["content"].(string)
+	require.True(t, ok)
+	require.NotContains(t, systemContent, "Mark true for these Chinese crypto requests as well:")
 }
 
 func TestOpenRouterCryptoProfileDetectorDetect_UsesStructuredOutputsAndRetriesOnInvalidJSON(t *testing.T) {
@@ -141,6 +146,76 @@ func TestOpenRouterCryptoProfileDetectorDetect_UsesStructuredOutputsAndRetriesOn
 	jsonSchema, ok := responseFormat["json_schema"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, true, jsonSchema["strict"])
+}
+
+func TestOpenRouterCryptoProfileDetectorDetect_OpenAICompatibleSkipsOpenRouterHeaders(t *testing.T) {
+	t.Helper()
+
+	var capturedAuth string
+	var capturedReferer string
+	var capturedTitle string
+
+	cfg := &config.Config{
+		Gateway: config.GatewayConfig{
+			CryptoProfileDetection: config.CryptoProfileDetectionConfig{
+				Enabled:        true,
+				Endpoint:       "https://openai-compatible.test/v1/chat/completions",
+				Provider:       "openai_compatible",
+				APIKey:         "oa-key-test",
+				TimeoutSeconds: 3,
+				HTTPReferer:    "https://sub2api.local",
+				Title:          "sub2api-test",
+			},
+		},
+	}
+
+	detector := NewOpenRouterCryptoProfileDetector(cfg)
+	detector.httpClient = &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			capturedAuth = r.Header.Get("Authorization")
+			capturedReferer = r.Header.Get("HTTP-Referer")
+			capturedTitle = r.Header.Get("X-Title")
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(strings.NewReader(`{
+					"choices": [
+						{
+							"message": {
+								"content": "{\"match\":true,\"profile\":\"crypto-basic\"}"
+							}
+						}
+					]
+				}`)),
+			}, nil
+		}),
+	}
+
+	result, err := detector.Detect(context.Background(), "最近 crypto 有什么热点")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "Bearer oa-key-test", capturedAuth)
+	require.Empty(t, capturedReferer)
+	require.Empty(t, capturedTitle)
+}
+
+func TestOpenRouterCryptoProfileDetector_OpenRouterLegacyAPIKeyFallback(t *testing.T) {
+	t.Helper()
+
+	cfg := &config.Config{
+		Gateway: config.GatewayConfig{
+			CryptoProfileDetection: config.CryptoProfileDetectionConfig{
+				Enabled:          true,
+				Provider:         "openrouter",
+				OpenRouterAPIKey: "legacy-or-key",
+			},
+		},
+	}
+
+	detector := NewOpenRouterCryptoProfileDetector(cfg)
+	require.True(t, detector.Enabled())
+	require.Equal(t, "legacy-or-key", detector.apiKey)
+	require.Equal(t, "https://openrouter.ai/api/v1/chat/completions", detector.endpoint)
 }
 
 func TestParseOpenRouterCryptoProfilePayload_NoneProfileMapsToEmpty(t *testing.T) {
