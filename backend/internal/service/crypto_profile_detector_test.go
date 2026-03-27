@@ -22,6 +22,17 @@ func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 func TestOpenRouterCryptoProfileDetectorDetect_Match(t *testing.T) {
 	t.Helper()
 
+	expectedPrompt := "你在做一个分类任务。判断用户问题是否应该路由到一个加密货币助手，并判断具体属于哪个 profile。\n" +
+		"可选的 profile 列表：\n" +
+		"- token-research: token 研究、代币分析、团队背景、解锁信息\n" +
+		"- crypto-basic: 加密市场分析、链上数据、whale 追踪、热点、资金流向\n" +
+		"- defi-lending: DeFi 借贷风险、利率比较\n" +
+		"- dex-routing: DEX swap 路由、交易路径优化\n" +
+		"- uniswap: Uniswap 池子分析、LP 策略\n" +
+		"请只返回 JSON，格式必须严格为 {\"match\": boolean, \"profile\": string}。\n" +
+		"不要输出 markdown、代码块、解释文字或额外字段。\n" +
+		"如果不属于 crypto，返回 {\"match\": false, \"profile\": \"none\"}。"
+
 	var capturedAuth string
 	var capturedReferer string
 	var capturedTitle string
@@ -79,6 +90,11 @@ func TestOpenRouterCryptoProfileDetectorDetect_Match(t *testing.T) {
 	messages, ok := capturedBody["messages"].([]any)
 	require.True(t, ok)
 	require.Len(t, messages, 2)
+	systemMessage, ok := messages[0].(map[string]any)
+	require.True(t, ok)
+	systemContent, ok := systemMessage["content"].(string)
+	require.True(t, ok)
+	require.Equal(t, expectedPrompt, systemContent)
 }
 
 func TestOpenRouterCryptoProfileDetectorDetect_UsesStructuredOutputsAndRetriesOnInvalidJSON(t *testing.T) {
@@ -141,6 +157,76 @@ func TestOpenRouterCryptoProfileDetectorDetect_UsesStructuredOutputsAndRetriesOn
 	jsonSchema, ok := responseFormat["json_schema"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, true, jsonSchema["strict"])
+}
+
+func TestOpenRouterCryptoProfileDetectorDetect_OpenAICompatibleSkipsOpenRouterHeaders(t *testing.T) {
+	t.Helper()
+
+	var capturedAuth string
+	var capturedReferer string
+	var capturedTitle string
+
+	cfg := &config.Config{
+		Gateway: config.GatewayConfig{
+			CryptoProfileDetection: config.CryptoProfileDetectionConfig{
+				Enabled:        true,
+				Endpoint:       "https://openai-compatible.test/v1/chat/completions",
+				Provider:       "openai_compatible",
+				APIKey:         "oa-key-test",
+				TimeoutSeconds: 3,
+				HTTPReferer:    "https://sub2api.local",
+				Title:          "sub2api-test",
+			},
+		},
+	}
+
+	detector := NewOpenRouterCryptoProfileDetector(cfg)
+	detector.httpClient = &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			capturedAuth = r.Header.Get("Authorization")
+			capturedReferer = r.Header.Get("HTTP-Referer")
+			capturedTitle = r.Header.Get("X-Title")
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(strings.NewReader(`{
+					"choices": [
+						{
+							"message": {
+								"content": "{\"match\":true,\"profile\":\"crypto-basic\"}"
+							}
+						}
+					]
+				}`)),
+			}, nil
+		}),
+	}
+
+	result, err := detector.Detect(context.Background(), "最近 crypto 有什么热点")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "Bearer oa-key-test", capturedAuth)
+	require.Empty(t, capturedReferer)
+	require.Empty(t, capturedTitle)
+}
+
+func TestOpenRouterCryptoProfileDetector_OpenRouterLegacyAPIKeyFallback(t *testing.T) {
+	t.Helper()
+
+	cfg := &config.Config{
+		Gateway: config.GatewayConfig{
+			CryptoProfileDetection: config.CryptoProfileDetectionConfig{
+				Enabled:          true,
+				Provider:         "openrouter",
+				OpenRouterAPIKey: "legacy-or-key",
+			},
+		},
+	}
+
+	detector := NewOpenRouterCryptoProfileDetector(cfg)
+	require.True(t, detector.Enabled())
+	require.Equal(t, "legacy-or-key", detector.apiKey)
+	require.Equal(t, "https://openrouter.ai/api/v1/chat/completions", detector.endpoint)
 }
 
 func TestParseOpenRouterCryptoProfilePayload_NoneProfileMapsToEmpty(t *testing.T) {

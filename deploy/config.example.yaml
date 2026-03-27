@@ -329,14 +329,24 @@ gateway:
   # Allow failover on selected 400 errors (default: off)
   # 允许在特定 400 错误时进行故障转移（默认：关闭）
   failover_on_400: false
-  # Crypto/web3 profile detection via OpenRouter (log-only, does not reroute requests)
-  # 基于 OpenRouter 的 Crypto/Web3 Profile 识别（仅记录日志，不改变路由）
+  # Crypto/web3 profile detection via OpenRouter or OpenAI-compatible upstreams (log-only, does not reroute requests)
+  # 基于 OpenRouter 或 OpenAI-compatible 上游的 Crypto/Web3 Profile 识别（仅记录日志，不改变路由）
   crypto_profile_detection:
     enabled: false
-    # Full OpenRouter Chat Completions endpoint
-    # OpenRouter Chat Completions 完整地址
-    endpoint: "https://openrouter.ai/api/v1/chat/completions"
+    # Supported: openrouter / openai_compatible
+    # 支持值：openrouter / openai_compatible
+    provider: "openrouter"
+    # Full Chat Completions endpoint.
+    # Leave empty to use the built-in OpenRouter default when provider=openrouter.
+    # Chat Completions 完整地址。
+    # 当 provider=openrouter 且留空时，使用内置 OpenRouter 默认地址。
+    endpoint: ""
+    # Preferred generic API key field.
+    # 首选的通用 API key 字段。
+    api_key: ""
+    # Backward-compatible OpenRouter key field.
     # Prefer injecting via environment variable: GATEWAY_CRYPTO_PROFILE_DETECTION_OPENROUTER_API_KEY
+    # 向后兼容的 OpenRouter key 字段。
     # 建议通过环境变量注入：GATEWAY_CRYPTO_PROFILE_DETECTION_OPENROUTER_API_KEY
     openrouter_api_key: ""
     # Router model used for classification
@@ -345,8 +355,8 @@ gateway:
     # Detection timeout (seconds)
     # 检测超时（秒）
     timeout_seconds: 3
-    # Optional OpenRouter attribution headers
-    # 可选的 OpenRouter 归因请求头
+    # Optional OpenRouter attribution headers (ignored for openai_compatible)
+    # 可选的 OpenRouter 归因请求头（openai_compatible 会忽略）
     http_referer: ""
     title: "sub2api"
   # Scheduling configuration

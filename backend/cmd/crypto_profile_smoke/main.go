@@ -32,17 +32,22 @@ func main() {
 	includeBorderline := flag.Bool("include-borderline", false, "also print borderline cases")
 	flag.Parse()
 
-	apiKey := strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY"))
+	provider := firstNonEmptyEnv("CRYPTO_PROFILE_DETECTOR_PROVIDER", "openrouter")
+	apiKey := firstNonEmptyEnv("CRYPTO_PROFILE_DETECTOR_API_KEY", "OPENROUTER_API_KEY")
 	if apiKey == "" {
-		fmt.Fprintln(os.Stderr, "OPENROUTER_API_KEY is required")
+		fmt.Fprintln(os.Stderr, "CRYPTO_PROFILE_DETECTOR_API_KEY or OPENROUTER_API_KEY is required")
 		os.Exit(1)
 	}
 
-	model := strings.TrimSpace(os.Getenv("OPENROUTER_MODEL"))
+	endpoint := firstNonEmptyEnv("CRYPTO_PROFILE_DETECTOR_ENDPOINT")
+	model := firstNonEmptyEnv("CRYPTO_PROFILE_DETECTOR_MODEL", "OPENROUTER_MODEL")
 	cfg := &config.Config{
 		Gateway: config.GatewayConfig{
 			CryptoProfileDetection: config.CryptoProfileDetectionConfig{
+				Provider:         provider,
 				Enabled:          true,
+				Endpoint:         endpoint,
+				APIKey:           apiKey,
 				OpenRouterAPIKey: apiKey,
 				Model:            model,
 				TimeoutSeconds:   15,
@@ -78,6 +83,16 @@ func main() {
 	}
 
 	fmt.Println("\nPASS: crypto profile smoke")
+}
+
+func firstNonEmptyEnv(keys ...string) string {
+	for _, key := range keys {
+		value := strings.TrimSpace(os.Getenv(key))
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func loadDataset(path string) (*dataset, error) {
