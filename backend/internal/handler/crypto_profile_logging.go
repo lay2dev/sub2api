@@ -18,13 +18,23 @@ func maybeLogCryptoProfileMatch(
 	message string,
 	entrypoint string,
 ) {
+	_ = detectCryptoProfileMatch(ctx, reqLog, detector, message, entrypoint)
+}
+
+func detectCryptoProfileMatch(
+	ctx context.Context,
+	reqLog *zap.Logger,
+	detector service.CryptoProfileDetector,
+	message string,
+	entrypoint string,
+) *service.CryptoProfileMatchResult {
 	if detector == nil || !detector.Enabled() {
-		return
+		return nil
 	}
 
 	trimmed := strings.TrimSpace(message)
 	if trimmed == "" {
-		return
+		return nil
 	}
 
 	if reqLog == nil {
@@ -37,10 +47,10 @@ func maybeLogCryptoProfileMatch(
 			zap.String("entrypoint", entrypoint),
 			zap.Error(err),
 		)
-		return
+		return nil
 	}
 	if result == nil || !result.Matched {
-		return
+		return result
 	}
 
 	reqLog.Info("gateway.crypto_profile_matched",
@@ -49,6 +59,7 @@ func maybeLogCryptoProfileMatch(
 		zap.String("detector_model", result.Model),
 		zap.Int("message_chars", len(trimmed)),
 	)
+	return result
 }
 
 func extractCryptoProfileMessageTextFromParsedRequest(parsed *service.ParsedRequest) string {

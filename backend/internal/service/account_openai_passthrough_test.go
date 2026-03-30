@@ -49,6 +49,38 @@ func TestAccount_IsOpenAIPassthroughEnabled(t *testing.T) {
 	})
 }
 
+func TestAccount_IsOpenAICryptoRouter(t *testing.T) {
+	t.Run("OpenAI 账号开启 crypto_router", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeAPIKey,
+			Extra: map[string]any{
+				"crypto_router": true,
+			},
+		}
+		require.True(t, account.IsOpenAICryptoRouter())
+	})
+
+	t.Run("字段缺失默认关闭", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeAPIKey,
+		}
+		require.False(t, account.IsOpenAICryptoRouter())
+	})
+
+	t.Run("非 OpenAI 账号关闭", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformAnthropic,
+			Type:     AccountTypeAPIKey,
+			Extra: map[string]any{
+				"crypto_router": true,
+			},
+		}
+		require.False(t, account.IsOpenAICryptoRouter())
+	})
+}
+
 func TestAccount_IsOpenAIOAuthPassthroughEnabled(t *testing.T) {
 	t.Run("仅OAuth类型允许返回开启", func(t *testing.T) {
 		oauthAccount := &Account{

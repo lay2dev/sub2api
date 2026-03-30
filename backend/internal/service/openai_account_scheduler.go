@@ -20,6 +20,14 @@ const (
 	openAIAccountScheduleLayerLoadBalance      = "load_balance"
 )
 
+type OpenAIChatRouteMode string
+
+const (
+	OpenAIChatRouteModeAny         OpenAIChatRouteMode = ""
+	OpenAIChatRouteModeDefaultOnly OpenAIChatRouteMode = "default_only"
+	OpenAIChatRouteModeCryptoOnly  OpenAIChatRouteMode = "crypto_only"
+)
+
 type OpenAIAccountScheduleRequest struct {
 	GroupID            *int64
 	SessionHash        string
@@ -28,6 +36,7 @@ type OpenAIAccountScheduleRequest struct {
 	RequestedModel     string
 	RequiredTransport  OpenAIUpstreamTransport
 	ExcludedIDs        map[int64]struct{}
+	ChatRouteMode      OpenAIChatRouteMode
 }
 
 type OpenAIAccountScheduleDecision struct {
@@ -326,6 +335,9 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 	if req.RequestedModel != "" && !account.IsModelSupported(req.RequestedModel) {
 		return nil, nil
 	}
+	if !accountMatchesOpenAIChatRouteMode(account, req.ChatRouteMode) {
+		return nil, nil
+	}
 	if !s.isAccountTransportCompatible(account, req.RequiredTransport) {
 		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
 		return nil, nil
@@ -582,6 +594,9 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 		if !account.IsSchedulable() || !account.IsOpenAI() {
 			continue
 		}
+		if !accountMatchesOpenAIChatRouteMode(account, req.ChatRouteMode) {
+			continue
+		}
 		if req.RequestedModel != "" && !account.IsModelSupported(req.RequestedModel) {
 			continue
 		}
@@ -688,7 +703,7 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 	for i := 0; i < len(selectionOrder); i++ {
 		candidate := selectionOrder[i]
 		fresh := s.service.resolveFreshSchedulableOpenAIAccount(ctx, candidate.account, req.RequestedModel)
-		if fresh == nil || !s.isAccountTransportCompatible(fresh, req.RequiredTransport) {
+		if fresh == nil || !accountMatchesOpenAIChatRouteMode(fresh, req.ChatRouteMode) || !s.isAccountTransportCompatible(fresh, req.RequiredTransport) {
 			continue
 		}
 		result, acquireErr := s.service.tryAcquireAccountSlot(ctx, fresh.ID, fresh.Concurrency)
@@ -711,7 +726,7 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 	// WaitPlan.MaxConcurrency 使用 Concurrency（非 EffectiveLoadFactor），因为 WaitPlan 控制的是 Redis 实际并发槽位等待。
 	for _, candidate := range selectionOrder {
 		fresh := s.service.resolveFreshSchedulableOpenAIAccount(ctx, candidate.account, req.RequestedModel)
-		if fresh == nil || !s.isAccountTransportCompatible(fresh, req.RequiredTransport) {
+		if fresh == nil || !accountMatchesOpenAIChatRouteMode(fresh, req.ChatRouteMode) || !s.isAccountTransportCompatible(fresh, req.RequiredTransport) {
 			continue
 		}
 		return &AccountSelectionResult{
@@ -737,6 +752,22 @@ func (s *defaultOpenAIAccountScheduler) isAccountTransportCompatible(account *Ac
 		return false
 	}
 	return s.service.getOpenAIWSProtocolResolver().Resolve(account).Transport == requiredTransport
+}
+
+func accountMatchesOpenAIChatRouteMode(account *Account, routeMode OpenAIChatRouteMode) bool {
+	if account == nil {
+		return false
+	}
+	switch routeMode {
+	case OpenAIChatRouteModeAny:
+		return true
+	case OpenAIChatRouteModeCryptoOnly:
+		return account.IsOpenAICryptoRouter()
+	case OpenAIChatRouteModeDefaultOnly:
+		return !account.IsOpenAICryptoRouter()
+	default:
+		return true
+	}
 }
 
 func (s *defaultOpenAIAccountScheduler) ReportResult(accountID int64, success bool, firstTokenMs *int) {
@@ -807,6 +838,32 @@ func (s *OpenAIGatewayService) SelectAccountWithScheduler(
 	excludedIDs map[int64]struct{},
 	requiredTransport OpenAIUpstreamTransport,
 ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
+	return s.selectAccountWithScheduler(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, OpenAIChatRouteModeAny)
+}
+
+func (s *OpenAIGatewayService) SelectAccountWithSchedulerForChatRoute(
+	ctx context.Context,
+	groupID *int64,
+	previousResponseID string,
+	sessionHash string,
+	requestedModel string,
+	excludedIDs map[int64]struct{},
+	requiredTransport OpenAIUpstreamTransport,
+	routeMode OpenAIChatRouteMode,
+) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
+	return s.selectAccountWithScheduler(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, routeMode)
+}
+
+func (s *OpenAIGatewayService) selectAccountWithScheduler(
+	ctx context.Context,
+	groupID *int64,
+	previousResponseID string,
+	sessionHash string,
+	requestedModel string,
+	excludedIDs map[int64]struct{},
+	requiredTransport OpenAIUpstreamTransport,
+	routeMode OpenAIChatRouteMode,
+) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
 	decision := OpenAIAccountScheduleDecision{}
 	scheduler := s.getOpenAIAccountScheduler()
 	if scheduler == nil {
@@ -830,6 +887,7 @@ func (s *OpenAIGatewayService) SelectAccountWithScheduler(
 		RequestedModel:     requestedModel,
 		RequiredTransport:  requiredTransport,
 		ExcludedIDs:        excludedIDs,
+		ChatRouteMode:      routeMode,
 	})
 }
 

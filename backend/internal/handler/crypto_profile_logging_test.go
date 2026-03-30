@@ -54,3 +54,31 @@ func TestMaybeLogCryptoProfileMatch_LogsWhenDetectorMatches(t *testing.T) {
 	require.True(t, logSink.ContainsFieldValue("entrypoint", "/v1/chat/completions"))
 	require.True(t, logSink.ContainsFieldValue("detector_model", "openai/gpt-5.2"))
 }
+
+func TestDetectCryptoProfileMatch_ReturnsResultWhenMatched(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logSink, restore := captureHandlerStructuredLog(t)
+	defer restore()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+
+	detector := &stubCryptoProfileDetector{
+		enabled: true,
+		result: &service.CryptoProfileMatchResult{
+			Matched: true,
+			Profile: "dex-routing",
+			Model:   "openai/gpt-5.2",
+		},
+	}
+
+	reqLog := requestLogger(c, "handler.openai_gateway.chat_completions")
+	result := detectCryptoProfileMatch(c.Request.Context(), reqLog, detector, "swap 10 ETH to USDC", "/v1/chat/completions")
+
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
+	require.Equal(t, "dex-routing", result.Profile)
+	require.Equal(t, "swap 10 ETH to USDC", detector.gotText)
+	require.True(t, logSink.ContainsMessageAtLevel("gateway.crypto_profile_matched", "info"))
+}

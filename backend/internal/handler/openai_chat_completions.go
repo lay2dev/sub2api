@@ -101,13 +101,17 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		h.handleStreamingAwareError(c, status, code, message, streamStarted)
 		return
 	}
-	maybeLogCryptoProfileMatch(
+	cryptoMatch := detectCryptoProfileMatch(
 		c.Request.Context(),
 		reqLog,
 		h.cryptoProfileDetector,
 		extractCryptoProfileMessageTextFromMessagesBody(body),
 		EndpointChatCompletions,
 	)
+	routeMode := service.OpenAIChatRouteModeDefaultOnly
+	if cryptoMatch != nil && cryptoMatch.Matched {
+		routeMode = service.OpenAIChatRouteModeCryptoOnly
+	}
 
 	sessionHash := h.gatewayService.GenerateSessionHash(c, body)
 	promptCacheKey := h.gatewayService.ExtractSessionID(c, body)
@@ -121,7 +125,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 	for {
 		c.Set("openai_chat_completions_fallback_model", "")
 		reqLog.Debug("openai_chat_completions.account_selecting", zap.Int("excluded_account_count", len(failedAccountIDs)))
-		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithScheduler(
+		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithSchedulerForChatRoute(
 			c.Request.Context(),
 			apiKey.GroupID,
 			"",
@@ -129,13 +133,14 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			reqModel,
 			failedAccountIDs,
 			service.OpenAIUpstreamTransportAny,
+			routeMode,
 		)
 		if err != nil {
 			reqLog.Warn("openai_chat_completions.account_select_failed",
 				zap.Error(err),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
-			if len(failedAccountIDs) == 0 {
+			if len(failedAccountIDs) == 0 && routeMode == service.OpenAIChatRouteModeDefaultOnly {
 				defaultModel := ""
 				if apiKey.Group != nil {
 					defaultModel = apiKey.Group.DefaultMappedModel
@@ -144,7 +149,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 					reqLog.Info("openai_chat_completions.fallback_to_default_model",
 						zap.String("default_mapped_model", defaultModel),
 					)
-					selection, scheduleDecision, err = h.gatewayService.SelectAccountWithScheduler(
+					selection, scheduleDecision, err = h.gatewayService.SelectAccountWithSchedulerForChatRoute(
 						c.Request.Context(),
 						apiKey.GroupID,
 						"",
@@ -152,6 +157,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 						defaultModel,
 						failedAccountIDs,
 						service.OpenAIUpstreamTransportAny,
+						routeMode,
 					)
 					if err == nil && selection != nil {
 						c.Set("openai_chat_completions_fallback_model", defaultModel)
@@ -189,7 +195,12 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		forwardStart := time.Now()
 
 		defaultMappedModel := resolveOpenAIForwardDefaultMappedModel(apiKey, c.GetString("openai_chat_completions_fallback_model"))
-		result, err := h.gatewayService.ForwardAsChatCompletions(c.Request.Context(), c, account, body, promptCacheKey, defaultMappedModel)
+		var result *service.OpenAIForwardResult
+		if routeMode == service.OpenAIChatRouteModeCryptoOnly {
+			result, err = h.gatewayService.ForwardChatCompletionsPassthrough(c.Request.Context(), c, account, body, defaultMappedModel)
+		} else {
+			result, err = h.gatewayService.ForwardAsChatCompletions(c.Request.Context(), c, account, body, promptCacheKey, defaultMappedModel)
+		}
 
 		forwardDurationMs := time.Since(forwardStart).Milliseconds()
 		if accountReleaseFunc != nil {
@@ -260,6 +271,10 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 
 		userAgent := c.GetHeader("User-Agent")
 		clientIP := ip.GetClientIP(c)
+		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
+		if routeMode == service.OpenAIChatRouteModeCryptoOnly {
+			upstreamEndpoint = EndpointChatCompletions
+		}
 
 		h.submitUsageRecordTask(func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
@@ -269,7 +284,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 				Account:          account,
 				Subscription:     subscription,
 				InboundEndpoint:  GetInboundEndpoint(c),
-				UpstreamEndpoint: GetUpstreamEndpoint(c, account.Platform),
+				UpstreamEndpoint: upstreamEndpoint,
 				UserAgent:        userAgent,
 				IPAddress:        clientIP,
 				APIKeyService:    h.apiKeyService,
