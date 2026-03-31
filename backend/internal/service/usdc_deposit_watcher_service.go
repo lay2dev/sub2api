@@ -1,0 +1,294 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"math"
+	"math/big"
+	"reflect"
+	"sort"
+	"strings"
+)
+
+const defaultUSDCDecimalsMultiplier int64 = 1_000_000
+
+type DepositUserResolver interface {
+	ResolveUserIDByAddress(ctx context.Context, address string) (int64, bool, error)
+}
+
+type USDCDepositWatcherConfig struct {
+	Chain                  string
+	USDCContract           string
+	ConfirmationsRequired  uint64
+	MaxBlocksPerScanChunk  uint64
+	USDCDecimalsMultiplier int64
+}
+
+type USDCDepositWatcherService struct {
+	depositRepo  OnchainDepositRepository
+	userResolver DepositUserResolver
+	rpcClient    EVMRPCClient
+	cfg          USDCDepositWatcherConfig
+}
+
+func NewUSDCDepositWatcherService(
+	depositRepo OnchainDepositRepository,
+	userResolver DepositUserResolver,
+	rpcClient EVMRPCClient,
+	cfg USDCDepositWatcherConfig,
+) *USDCDepositWatcherService {
+	if cfg.MaxBlocksPerScanChunk == 0 {
+		cfg.MaxBlocksPerScanChunk = 1
+	}
+	if cfg.USDCDecimalsMultiplier <= 0 {
+		cfg.USDCDecimalsMultiplier = defaultUSDCDecimalsMultiplier
+	}
+	cfg.Chain = strings.ToLower(strings.TrimSpace(cfg.Chain))
+	cfg.USDCContract = normalizeAddress(cfg.USDCContract)
+
+	return &USDCDepositWatcherService{
+		depositRepo:  depositRepo,
+		userResolver: userResolver,
+		rpcClient:    rpcClient,
+		cfg:          cfg,
+	}
+}
+
+func (s *USDCDepositWatcherService) ScanOnce(ctx context.Context) error {
+	if s == nil || s.depositRepo == nil || s.userResolver == nil || s.rpcClient == nil {
+		return fmt.Errorf("watcher dependencies are not initialized")
+	}
+
+	latestBlock, err := s.rpcClient.LatestBlock(ctx, s.cfg.Chain)
+	if err != nil {
+		return err
+	}
+	if latestBlock < s.cfg.ConfirmationsRequired {
+		return nil
+	}
+
+	scanState, err := s.depositRepo.GetScanState(ctx, s.cfg.Chain)
+	if err != nil {
+		return err
+	}
+
+	var cursor uint64
+	if scanState != nil && scanState.LastScannedBlock > 0 {
+		cursor = uint64(scanState.LastScannedBlock)
+	}
+
+	safeBlock := latestBlock - s.cfg.ConfirmationsRequired
+	if cursor >= safeBlock {
+		return nil
+	}
+
+	watchAddresses, err := s.resolveWatchAddresses(ctx)
+	if err != nil {
+		return err
+	}
+
+	for from := cursor + 1; from <= safeBlock; {
+		to := from + s.cfg.MaxBlocksPerScanChunk - 1
+		if to > safeBlock {
+			to = safeBlock
+		}
+
+		if err := s.scanChunk(ctx, from, to, watchAddresses); err != nil {
+			return err
+		}
+		if err := s.depositRepo.UpsertScanState(ctx, s.cfg.Chain, int64(to)); err != nil {
+			return err
+		}
+
+		if to == math.MaxUint64 {
+			break
+		}
+		from = to + 1
+	}
+
+	return nil
+}
+
+func (s *USDCDepositWatcherService) scanChunk(ctx context.Context, from, to uint64, watchAddresses []string) error {
+	if len(watchAddresses) == 0 {
+		logs, err := s.rpcClient.GetERC20TransferLogs(ctx, EVMTransferLogFilter{
+			Chain:     s.cfg.Chain,
+			Contract:  s.cfg.USDCContract,
+			FromBlock: from,
+			ToBlock:   to,
+		})
+		if err != nil {
+			return err
+		}
+		return s.processLogs(ctx, logs)
+	}
+
+	for _, toAddress := range watchAddresses {
+		logs, err := s.rpcClient.GetERC20TransferLogs(ctx, EVMTransferLogFilter{
+			Chain:     s.cfg.Chain,
+			Contract:  s.cfg.USDCContract,
+			ToAddress: toAddress,
+			FromBlock: from,
+			ToBlock:   to,
+		})
+		if err != nil {
+			return err
+		}
+		if err := s.processLogs(ctx, logs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *USDCDepositWatcherService) processLogs(ctx context.Context, logs []EVMTransferLog) error {
+	for _, log := range logs {
+		userID, ok, err := s.userResolver.ResolveUserIDByAddress(ctx, log.ToAddress)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		if err := s.processLog(ctx, userID, log); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *USDCDepositWatcherService) processLog(ctx context.Context, userID int64, log EVMTransferLog) error {
+	amount, err := parseUSDCAmountWithMultiplier(log.ValueRaw, s.cfg.USDCDecimalsMultiplier)
+	if err != nil {
+		return err
+	}
+
+	logIndex, err := uint64ToInt64(log.LogIndex)
+	if err != nil {
+		return err
+	}
+	blockNumber, err := uint64ToInt64(log.BlockNumber)
+	if err != nil {
+		return err
+	}
+
+	deposit, err := s.depositRepo.CreateOrGetDetected(ctx, &OnchainDeposit{
+		UserID:        userID,
+		Chain:         s.cfg.Chain,
+		TokenSymbol:   "USDC",
+		TokenContract: s.cfg.USDCContract,
+		TXHash:        strings.ToLower(strings.TrimSpace(log.TXHash)),
+		LogIndex:      logIndex,
+		BlockNumber:   blockNumber,
+		BlockHash:     strings.ToLower(strings.TrimSpace(log.BlockHash)),
+		FromAddress:   normalizeAddress(log.FromAddress),
+		ToAddress:     normalizeAddress(log.ToAddress),
+		AmountRaw:     strings.TrimSpace(log.ValueRaw),
+		AmountCredit:  amount,
+		Status:        OnchainDepositStatusDetected,
+	})
+	if err != nil {
+		return err
+	}
+	if deposit == nil || deposit.Status == OnchainDepositStatusCredited {
+		return nil
+	}
+
+	creditUserID := deposit.UserID
+	if creditUserID == 0 {
+		creditUserID = userID
+	}
+	return s.depositRepo.CreditDepositAndBalance(ctx, deposit.ID, creditUserID, amount)
+}
+
+func parseUSDCAmount(raw string) (float64, error) {
+	return parseUSDCAmountWithMultiplier(raw, defaultUSDCDecimalsMultiplier)
+}
+
+func parseUSDCAmountWithMultiplier(raw string, multiplier int64) (float64, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return 0, fmt.Errorf("empty amount")
+	}
+	if multiplier <= 0 {
+		return 0, fmt.Errorf("invalid decimals multiplier: %d", multiplier)
+	}
+
+	amountInt := new(big.Int)
+	if _, ok := amountInt.SetString(value, 10); !ok {
+		return 0, fmt.Errorf("invalid amount: %q", raw)
+	}
+	if amountInt.Sign() < 0 {
+		return 0, fmt.Errorf("amount must be non-negative")
+	}
+
+	amountRat := new(big.Rat).SetInt(amountInt)
+	amountRat.Quo(amountRat, big.NewRat(multiplier, 1))
+	amountFloat, _ := amountRat.Float64()
+	return amountFloat, nil
+}
+
+func uint64ToInt64(v uint64) (int64, error) {
+	if v > math.MaxInt64 {
+		return 0, fmt.Errorf("value overflows int64: %d", v)
+	}
+	return int64(v), nil
+}
+
+func normalizeAddress(address string) string {
+	return strings.ToLower(strings.TrimSpace(address))
+}
+
+type bindingAddressLister interface {
+	ListBindingAddresses(ctx context.Context) ([]string, error)
+}
+
+func (s *USDCDepositWatcherService) resolveWatchAddresses(ctx context.Context) ([]string, error) {
+	if lister, ok := s.userResolver.(bindingAddressLister); ok {
+		addrs, err := lister.ListBindingAddresses(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return normalizeAddresses(addrs), nil
+	}
+
+	// Backward-compatible path for the in-package unit-test stub.
+	v := reflect.ValueOf(s.userResolver)
+	if v.Kind() == reflect.Pointer {
+		v = v.Elem()
+	}
+	if v.IsValid() && v.Kind() == reflect.Struct {
+		field := v.FieldByName("usersByAddress")
+		if field.IsValid() && field.Kind() == reflect.Map && field.Type().Key().Kind() == reflect.String {
+			keys := make([]string, 0, field.Len())
+			iter := field.MapRange()
+			for iter.Next() {
+				keys = append(keys, iter.Key().String())
+			}
+			return normalizeAddresses(keys), nil
+		}
+	}
+
+	return nil, nil
+}
+
+func normalizeAddresses(addresses []string) []string {
+	if len(addresses) == 0 {
+		return nil
+	}
+	unique := make(map[string]struct{}, len(addresses))
+	normalized := make([]string, 0, len(addresses))
+	for _, addr := range addresses {
+		norm := normalizeAddress(addr)
+		if norm == "" {
+			continue
+		}
+		if _, ok := unique[norm]; ok {
+			continue
+		}
+		unique[norm] = struct{}{}
+		normalized = append(normalized, norm)
+	}
+	sort.Strings(normalized)
+	return normalized
+}

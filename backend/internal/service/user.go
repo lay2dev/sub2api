@@ -6,6 +6,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type UserAddressMatch struct {
+	UserID         int64
+	BindingAddress string
+}
+
 type User struct {
 	ID             int64
 	Email          string

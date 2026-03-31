@@ -113,6 +113,42 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*service
 	return out, nil
 }
 
+func (r *userRepository) FindUsersByBindingAddresses(ctx context.Context, addresses []string) ([]service.UserAddressMatch, error) {
+	normalized := make([]string, 0, len(addresses))
+	seen := make(map[string]struct{}, len(addresses))
+	for _, address := range addresses {
+		addr := strings.ToLower(strings.TrimSpace(address))
+		if addr == "" {
+			continue
+		}
+		if _, exists := seen[addr]; exists {
+			continue
+		}
+		seen[addr] = struct{}{}
+		normalized = append(normalized, addr)
+	}
+	if len(normalized) == 0 {
+		return []service.UserAddressMatch{}, nil
+	}
+
+	users, err := r.client.User.Query().
+		Where(dbuser.BindingAddressIn(normalized...)).
+		Select(dbuser.FieldID, dbuser.FieldBindingAddress).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	matches := make([]service.UserAddressMatch, 0, len(users))
+	for _, user := range users {
+		matches = append(matches, service.UserAddressMatch{
+			UserID:         user.ID,
+			BindingAddress: strings.ToLower(strings.TrimSpace(user.BindingAddress)),
+		})
+	}
+	return matches, nil
+}
+
 func (r *userRepository) Update(ctx context.Context, userIn *service.User) error {
 	if userIn == nil {
 		return nil
