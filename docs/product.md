@@ -18,6 +18,8 @@ This document captures product-level rules for `sub2api`.
 - User-visible behavior changes require corresponding docs updates.
 - Upstream-specific request requirements must be documented when they affect successful routing.
 - Validation should prove both normal and failure-path behavior for major gateway changes.
+- OpenAI `/v1/chat/completions` routes may use account-level `base_url` overrides to reach dedicated upstreams when request classification requires a specialized provider.
+- Dedicated specialized upstreams should be modeled as explicit account roles or flags, not hidden behind unrelated business logic.
 
 ## For coding-agent upstreams
 

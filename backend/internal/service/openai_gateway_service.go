@@ -3619,10 +3619,20 @@ func extractOpenAIUsageFromJSONBytes(body []byte) (OpenAIUsage, bool) {
 		"usage.input_tokens",
 		"usage.output_tokens",
 		"usage.input_tokens_details.cached_tokens",
+		"usage.prompt_tokens",
+		"usage.completion_tokens",
 	)
+	inputTokens := int(values[0].Int())
+	outputTokens := int(values[1].Int())
+	if inputTokens == 0 && values[3].Exists() {
+		inputTokens = int(values[3].Int())
+	}
+	if outputTokens == 0 && values[4].Exists() {
+		outputTokens = int(values[4].Int())
+	}
 	return OpenAIUsage{
-		InputTokens:          int(values[0].Int()),
-		OutputTokens:         int(values[1].Int()),
+		InputTokens:          inputTokens,
+		OutputTokens:         outputTokens,
 		CacheReadInputTokens: int(values[2].Int()),
 	}, true
 }

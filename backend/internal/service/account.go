@@ -935,6 +935,14 @@ func (a *Account) IsOpenAIPassthroughEnabled() bool {
 	return false
 }
 
+func (a *Account) IsOpenAICryptoRouter() bool {
+	if a == nil || !a.IsOpenAI() || a.Extra == nil {
+		return false
+	}
+	enabled, ok := a.Extra["crypto_router"].(bool)
+	return ok && enabled
+}
+
 // IsOpenAIResponsesWebSocketV2Enabled 返回 OpenAI 账号是否开启 Responses WebSocket v2。
 //
 // 分类型新字段：
