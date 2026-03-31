@@ -222,20 +222,27 @@ func (s *USDCDepositWatcherService) ScanOnce(ctx context.Context) error {
 }
 
 func (s *USDCDepositWatcherService) scanChunk(ctx context.Context, from, to uint64, watchAddresses []string) error {
-	for _, toAddress := range watchAddresses {
-		logs, err := s.rpcClient.GetERC20TransferLogs(ctx, EVMTransferLogFilter{
-			Chain:     s.cfg.Chain,
-			Contract:  s.cfg.USDCContract,
-			ToAddress: toAddress,
-			FromBlock: from,
-			ToBlock:   to,
-		})
-		if err != nil {
-			return err
-		}
-		if err := s.processLogs(ctx, logs); err != nil {
-			return err
-		}
+	if len(watchAddresses) == 0 {
+		return nil
+	}
+
+	toAddressFilter := watchAddresses[0]
+	if len(watchAddresses) > 1 {
+		toAddressFilter = strings.Join(watchAddresses, ",")
+	}
+
+	logs, err := s.rpcClient.GetERC20TransferLogs(ctx, EVMTransferLogFilter{
+		Chain:     s.cfg.Chain,
+		Contract:  s.cfg.USDCContract,
+		ToAddress: toAddressFilter,
+		FromBlock: from,
+		ToBlock:   to,
+	})
+	if err != nil {
+		return err
+	}
+	if err := s.processLogs(ctx, logs); err != nil {
+		return err
 	}
 	return nil
 }

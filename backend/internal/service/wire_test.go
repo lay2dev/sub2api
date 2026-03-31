@@ -94,4 +94,8 @@ func TestWatcher_ProvideUSDCDepositWatcherServiceBuildsMultiChainChildren(t *tes
 			t.Fatalf("expected start_block=%d for chain=%s, got %d", want, child.cfg.Chain, child.cfg.StartBlock)
 		}
 	}
+
+	// Group stop should be safe and idempotent even with child watchers.
+	watcher.Stop()
+	watcher.Stop()
 }

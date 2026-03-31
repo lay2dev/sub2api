@@ -26,17 +26,19 @@ type ethLogReader interface {
 type ethClientDialer func(ctx context.Context, endpoint string) (ethLogReader, error)
 
 type evmRPCClient struct {
-	mu        sync.RWMutex
-	endpoints map[string]string
-	clients   map[string]ethLogReader
-	dial      ethClientDialer
+	mu          sync.RWMutex
+	endpoints   map[string]string
+	clients     map[string]ethLogReader
+	chainDialMu map[string]*sync.Mutex
+	dial        ethClientDialer
 }
 
 func NewEVMRPCClient(cfg *config.Config) service.EVMRPCClient {
 	return &evmRPCClient{
-		endpoints: buildEVMRPCEndpoints(cfg),
-		clients:   map[string]ethLogReader{},
-		dial:      defaultEthClientDial,
+		endpoints:   buildEVMRPCEndpoints(cfg),
+		clients:     map[string]ethLogReader{},
+		chainDialMu: map[string]*sync.Mutex{},
+		dial:        defaultEthClientDial,
 	}
 }
 
@@ -118,17 +120,25 @@ func (c *evmRPCClient) clientForChain(ctx context.Context, chain string) (ethLog
 		return nil, fmt.Errorf("rpc endpoint is not configured for chain=%s", chain)
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	lock := c.getChainDialLock(chain)
+	lock.Lock()
+	defer lock.Unlock()
 
+	c.mu.RLock()
 	if client, ok := c.clients[chain]; ok {
+		c.mu.RUnlock()
 		return client, nil
 	}
+	c.mu.RUnlock()
+
 	client, err := c.dial(ctx, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("dial chain=%s rpc: %w", chain, err)
 	}
+
+	c.mu.Lock()
 	c.clients[chain] = client
+	c.mu.Unlock()
 	return client, nil
 }
 
@@ -143,12 +153,12 @@ func buildERC20TransferFilterQuery(filter service.EVMTransferLogFilter) (ethereu
 	}
 
 	topics := [][]common.Hash{{erc20TransferTopic}}
-	toAddress := strings.TrimSpace(filter.ToAddress)
-	if toAddress != "" {
-		if !common.IsHexAddress(toAddress) {
-			return ethereum.FilterQuery{}, fmt.Errorf("invalid to_address: %q", filter.ToAddress)
-		}
-		topics = append(topics, nil, []common.Hash{topicAddressHash(toAddress)})
+	toTopicHashes, err := buildToAddressTopicHashes(filter.ToAddress)
+	if err != nil {
+		return ethereum.FilterQuery{}, err
+	}
+	if len(toTopicHashes) > 0 {
+		topics = append(topics, nil, toTopicHashes)
 	}
 
 	return ethereum.FilterQuery{
@@ -157,6 +167,46 @@ func buildERC20TransferFilterQuery(filter service.EVMTransferLogFilter) (ethereu
 		Addresses: []common.Address{common.HexToAddress(contract)},
 		Topics:    topics,
 	}, nil
+}
+
+func (c *evmRPCClient) getChainDialLock(chain string) *sync.Mutex {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	lock, ok := c.chainDialMu[chain]
+	if ok {
+		return lock
+	}
+	lock = &sync.Mutex{}
+	c.chainDialMu[chain] = lock
+	return lock
+}
+
+func buildToAddressTopicHashes(raw string) ([]common.Hash, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return nil, nil
+	}
+
+	parts := strings.Split(value, ",")
+	unique := make(map[string]struct{}, len(parts))
+	out := make([]common.Hash, 0, len(parts))
+	for _, part := range parts {
+		toAddress := strings.TrimSpace(part)
+		if toAddress == "" {
+			continue
+		}
+		if !common.IsHexAddress(toAddress) {
+			return nil, fmt.Errorf("invalid to_address: %q", raw)
+		}
+
+		normalized := strings.ToLower(toAddress)
+		if _, ok := unique[normalized]; ok {
+			continue
+		}
+		unique[normalized] = struct{}{}
+		out = append(out, topicAddressHash(toAddress))
+	}
+	return out, nil
 }
 
 func topicAddressHash(address string) common.Hash {

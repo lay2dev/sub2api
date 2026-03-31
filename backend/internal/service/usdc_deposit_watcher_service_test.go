@@ -148,6 +148,12 @@ func (s *stubEVMRPCClient) GetERC20TransferLogs(_ context.Context, req EVMTransf
 		return nil, s.err
 	}
 	s.filters = append(s.filters, req)
+	toAddressFilters := parseFilterToAddresses(req.ToAddress)
+	toAddressFilterSet := make(map[string]struct{}, len(toAddressFilters))
+	for _, addr := range toAddressFilters {
+		toAddressFilterSet[strings.ToLower(addr)] = struct{}{}
+	}
+
 	var out []EVMTransferLog
 	for _, log := range s.logs {
 		if !strings.EqualFold(log.Chain, req.Chain) {
@@ -156,8 +162,10 @@ func (s *stubEVMRPCClient) GetERC20TransferLogs(_ context.Context, req EVMTransf
 		if req.Contract != "" && !strings.EqualFold(log.Contract, req.Contract) {
 			continue
 		}
-		if req.ToAddress != "" && !strings.EqualFold(log.ToAddress, req.ToAddress) {
-			continue
+		if len(toAddressFilterSet) > 0 {
+			if _, ok := toAddressFilterSet[strings.ToLower(log.ToAddress)]; !ok {
+				continue
+			}
 		}
 		if log.BlockNumber < req.FromBlock || log.BlockNumber > req.ToBlock {
 			continue
@@ -165,6 +173,23 @@ func (s *stubEVMRPCClient) GetERC20TransferLogs(_ context.Context, req EVMTransf
 		out = append(out, log)
 	}
 	return out, nil
+}
+
+func parseFilterToAddresses(raw string) []string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil
+	}
+	parts := strings.Split(trimmed, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		addr := strings.TrimSpace(part)
+		if addr == "" {
+			continue
+		}
+		out = append(out, addr)
+	}
+	return out
 }
 
 func TestWatcher_CreditsMatchedConfirmedTransferOnce(t *testing.T) {
@@ -473,6 +498,65 @@ func TestWatcher_HonorsStartBlockOnFirstScanState(t *testing.T) {
 	require.Equal(t, uint64(114), rpc.filters[0].ToBlock)
 	require.Equal(t, int64(114), repo.scanState("base"))
 	require.Equal(t, 1, repo.creditedCount())
+}
+
+func TestWatcher_ScansMultipleWatchAddressesInSingleRPCFilterCallPerChunk(t *testing.T) {
+	repo := newStubOnchainDepositRepo()
+	repo.scanStates["base"] = 100
+
+	rpc := &stubEVMRPCClient{
+		latest: 120,
+		logs: []EVMTransferLog{
+			{
+				Chain:       "base",
+				Contract:    "0x0000000000000000000000000000000000000usd",
+				BlockNumber: 112,
+				BlockHash:   "0xblock",
+				TXHash:      "0xtx-a1",
+				LogIndex:    1,
+				FromAddress: "0x0000000000000000000000000000000000000aaa",
+				ToAddress:   "0x0000000000000000000000000000000000000011",
+				ValueRaw:    "1000000",
+			},
+			{
+				Chain:       "base",
+				Contract:    "0x0000000000000000000000000000000000000usd",
+				BlockNumber: 113,
+				BlockHash:   "0xblock",
+				TXHash:      "0xtx-a2",
+				LogIndex:    2,
+				FromAddress: "0x0000000000000000000000000000000000000bbb",
+				ToAddress:   "0x0000000000000000000000000000000000000022",
+				ValueRaw:    "2000000",
+			},
+		},
+	}
+	resolver := &stubDepositUserResolver{
+		usersByAddress: map[string]int64{
+			"0x0000000000000000000000000000000000000011": 101,
+			"0x0000000000000000000000000000000000000022": 202,
+		},
+	}
+
+	watcher := NewUSDCDepositWatcherService(repo, resolver, rpc, USDCDepositWatcherConfig{
+		Chain:                  "base",
+		USDCContract:           "0x0000000000000000000000000000000000000usd",
+		ConfirmationsRequired:  6,
+		MaxBlocksPerScanChunk:  50,
+		USDCDecimalsMultiplier: 1_000_000,
+	})
+
+	err := watcher.ScanOnce(context.Background())
+	require.NoError(t, err)
+	require.Len(t, rpc.filters, 1)
+	require.Equal(t, uint64(101), rpc.filters[0].FromBlock)
+	require.Equal(t, uint64(114), rpc.filters[0].ToBlock)
+	require.ElementsMatch(t, []string{
+		"0x0000000000000000000000000000000000000011",
+		"0x0000000000000000000000000000000000000022",
+	}, parseFilterToAddresses(rpc.filters[0].ToAddress))
+	require.Equal(t, 2, repo.creditedCount())
+	require.Equal(t, int64(114), repo.scanState("base"))
 }
 
 func TestUSDCDepositWatcherService_StopIsSafe(t *testing.T) {
