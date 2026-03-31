@@ -13,9 +13,9 @@ type EVMTransferLog struct {
 }
 
 type EVMTransferLogFilter struct {
-	Chain     string
-	Contract  string
-	ToAddress string
-	FromBlock uint64
-	ToBlock   uint64
+	Chain       string
+	Contract    string
+	ToAddresses []string
+	FromBlock   uint64
+	ToBlock     uint64
 }

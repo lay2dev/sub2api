@@ -153,7 +153,7 @@ func buildERC20TransferFilterQuery(filter service.EVMTransferLogFilter) (ethereu
 	}
 
 	topics := [][]common.Hash{{erc20TransferTopic}}
-	toTopicHashes, err := buildToAddressTopicHashes(filter.ToAddress)
+	toTopicHashes, err := buildToAddressTopicHashes(filter.ToAddresses)
 	if err != nil {
 		return ethereum.FilterQuery{}, err
 	}
@@ -181,22 +181,20 @@ func (c *evmRPCClient) getChainDialLock(chain string) *sync.Mutex {
 	return lock
 }
 
-func buildToAddressTopicHashes(raw string) ([]common.Hash, error) {
-	value := strings.TrimSpace(raw)
-	if value == "" {
+func buildToAddressTopicHashes(addresses []string) ([]common.Hash, error) {
+	if len(addresses) == 0 {
 		return nil, nil
 	}
 
-	parts := strings.Split(value, ",")
-	unique := make(map[string]struct{}, len(parts))
-	out := make([]common.Hash, 0, len(parts))
-	for _, part := range parts {
-		toAddress := strings.TrimSpace(part)
+	unique := make(map[string]struct{}, len(addresses))
+	out := make([]common.Hash, 0, len(addresses))
+	for _, address := range addresses {
+		toAddress := strings.TrimSpace(address)
 		if toAddress == "" {
 			continue
 		}
 		if !common.IsHexAddress(toAddress) {
-			return nil, fmt.Errorf("invalid to_address: %q", raw)
+			return nil, fmt.Errorf("invalid to_address: %q", address)
 		}
 
 		normalized := strings.ToLower(toAddress)

@@ -148,9 +148,8 @@ func (s *stubEVMRPCClient) GetERC20TransferLogs(_ context.Context, req EVMTransf
 		return nil, s.err
 	}
 	s.filters = append(s.filters, req)
-	toAddressFilters := parseFilterToAddresses(req.ToAddress)
-	toAddressFilterSet := make(map[string]struct{}, len(toAddressFilters))
-	for _, addr := range toAddressFilters {
+	toAddressFilterSet := make(map[string]struct{}, len(req.ToAddresses))
+	for _, addr := range req.ToAddresses {
 		toAddressFilterSet[strings.ToLower(addr)] = struct{}{}
 	}
 
@@ -173,23 +172,6 @@ func (s *stubEVMRPCClient) GetERC20TransferLogs(_ context.Context, req EVMTransf
 		out = append(out, log)
 	}
 	return out, nil
-}
-
-func parseFilterToAddresses(raw string) []string {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return nil
-	}
-	parts := strings.Split(trimmed, ",")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		addr := strings.TrimSpace(part)
-		if addr == "" {
-			continue
-		}
-		out = append(out, addr)
-	}
-	return out
 }
 
 func TestWatcher_CreditsMatchedConfirmedTransferOnce(t *testing.T) {
@@ -257,11 +239,11 @@ func TestWatcher_CreditsMatchedConfirmedTransferOnce(t *testing.T) {
 	require.Equal(t, int64(114), repo.scanState("base"))
 	require.Len(t, rpc.filters, 1)
 	require.Equal(t, EVMTransferLogFilter{
-		Chain:     "base",
-		Contract:  "0x0000000000000000000000000000000000000usd",
-		ToAddress: "0x0000000000000000000000000000000000000011",
-		FromBlock: 101,
-		ToBlock:   114,
+		Chain:       "base",
+		Contract:    "0x0000000000000000000000000000000000000usd",
+		ToAddresses: []string{"0x0000000000000000000000000000000000000011"},
+		FromBlock:   101,
+		ToBlock:     114,
 	}, rpc.filters[0])
 }
 
@@ -304,7 +286,7 @@ func TestWatcher_DoesNotCreditBelowConfirmationThreshold(t *testing.T) {
 	require.Equal(t, 0, repo.creditedCount())
 	require.Equal(t, int64(114), repo.scanState("base"))
 	require.Len(t, rpc.filters, 1)
-	require.Equal(t, "0x0000000000000000000000000000000000000011", rpc.filters[0].ToAddress)
+	require.Equal(t, []string{"0x0000000000000000000000000000000000000011"}, rpc.filters[0].ToAddresses)
 }
 
 func TestWatcher_ReprocessingSameLogDoesNotDoubleCredit(t *testing.T) {
@@ -554,7 +536,7 @@ func TestWatcher_ScansMultipleWatchAddressesInSingleRPCFilterCallPerChunk(t *tes
 	require.ElementsMatch(t, []string{
 		"0x0000000000000000000000000000000000000011",
 		"0x0000000000000000000000000000000000000022",
-	}, parseFilterToAddresses(rpc.filters[0].ToAddress))
+	}, rpc.filters[0].ToAddresses)
 	require.Equal(t, 2, repo.creditedCount())
 	require.Equal(t, int64(114), repo.scanState("base"))
 }

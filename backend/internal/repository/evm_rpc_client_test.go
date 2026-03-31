@@ -29,11 +29,11 @@ func (s *stubEthLogReader) FilterLogs(_ context.Context, _ ethereum.FilterQuery)
 
 func TestBuildERC20TransferFilterQuery_WithToAddressTopic(t *testing.T) {
 	filter := service.EVMTransferLogFilter{
-		Chain:     "base",
-		Contract:  "0x1111111111111111111111111111111111111111",
-		ToAddress: "0x2222222222222222222222222222222222222222",
-		FromBlock: 100,
-		ToBlock:   200,
+		Chain:       "base",
+		Contract:    "0x1111111111111111111111111111111111111111",
+		ToAddresses: []string{"0x2222222222222222222222222222222222222222"},
+		FromBlock:   100,
+		ToBlock:     200,
 	}
 
 	query, err := buildERC20TransferFilterQuery(filter)
@@ -46,7 +46,7 @@ func TestBuildERC20TransferFilterQuery_WithToAddressTopic(t *testing.T) {
 	require.Len(t, query.Topics, 3)
 	require.Equal(t, []common.Hash{erc20TransferTopic}, query.Topics[0])
 	require.Nil(t, query.Topics[1])
-	require.Equal(t, []common.Hash{topicAddressHash(filter.ToAddress)}, query.Topics[2])
+	require.Equal(t, []common.Hash{topicAddressHash(filter.ToAddresses[0])}, query.Topics[2])
 }
 
 func TestBuildERC20TransferFilterQuery_WithoutToAddressTopic(t *testing.T) {
@@ -65,9 +65,12 @@ func TestBuildERC20TransferFilterQuery_WithoutToAddressTopic(t *testing.T) {
 
 func TestBuildERC20TransferFilterQuery_WithMultipleToAddressesTopic(t *testing.T) {
 	filter := service.EVMTransferLogFilter{
-		Chain:     "base",
-		Contract:  "0x1111111111111111111111111111111111111111",
-		ToAddress: "0x2222222222222222222222222222222222222222, 0x3333333333333333333333333333333333333333",
+		Chain:    "base",
+		Contract: "0x1111111111111111111111111111111111111111",
+		ToAddresses: []string{
+			"0x2222222222222222222222222222222222222222",
+			"0x3333333333333333333333333333333333333333",
+		},
 		FromBlock: 100,
 		ToBlock:   200,
 	}

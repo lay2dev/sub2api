@@ -226,17 +226,12 @@ func (s *USDCDepositWatcherService) scanChunk(ctx context.Context, from, to uint
 		return nil
 	}
 
-	toAddressFilter := watchAddresses[0]
-	if len(watchAddresses) > 1 {
-		toAddressFilter = strings.Join(watchAddresses, ",")
-	}
-
 	logs, err := s.rpcClient.GetERC20TransferLogs(ctx, EVMTransferLogFilter{
-		Chain:     s.cfg.Chain,
-		Contract:  s.cfg.USDCContract,
-		ToAddress: toAddressFilter,
-		FromBlock: from,
-		ToBlock:   to,
+		Chain:       s.cfg.Chain,
+		Contract:    s.cfg.USDCContract,
+		ToAddresses: watchAddresses,
+		FromBlock:   from,
+		ToBlock:     to,
 	})
 	if err != nil {
 		return err
