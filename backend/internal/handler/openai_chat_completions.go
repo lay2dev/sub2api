@@ -108,13 +108,39 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		extractCryptoProfileMessageTextFromMessagesBody(body),
 		EndpointChatCompletions,
 	)
-	routeMode := service.OpenAIChatRouteModeDefaultOnly
+
+	forwardBody := body
+	var cryptoPrefetchPrepared *service.OpenAICryptoChatPreparation
+	var cryptoPrefetchAccount *service.Account
 	if cryptoMatch != nil && cryptoMatch.Matched {
-		routeMode = service.OpenAIChatRouteModeCryptoOnly
+		prepared, account, ok := h.prepareCryptoEnhancedChatRequestBody(
+			c,
+			apiKey,
+			body,
+			reqModel,
+			&streamStarted,
+			reqLog,
+		)
+		if !ok {
+			return
+		}
+		cryptoPrefetchPrepared = prepared
+		cryptoPrefetchAccount = account
+		forwardBody = prepared.EnhancedBody
 	}
 
 	sessionHash := h.gatewayService.GenerateSessionHash(c, body)
 	promptCacheKey := h.gatewayService.ExtractSessionID(c, body)
+	if cryptoPrefetchPrepared != nil {
+		promptCacheKey = h.gatewayService.DeriveCryptoEnhancedPromptCacheKey(promptCacheKey, cryptoPrefetchPrepared.EnhancedBody)
+	}
+	routeMode := service.OpenAIChatRouteModeDefaultOnly
+
+	userAgent := c.GetHeader("User-Agent")
+	clientIP := ip.GetClientIP(c)
+	if cryptoPrefetchPrepared != nil && cryptoPrefetchPrepared.PrefetchResult != nil && cryptoPrefetchAccount != nil {
+		h.submitOpenAIChatUsageRecord(apiKey, subscription, cryptoPrefetchAccount, cryptoPrefetchPrepared.PrefetchResult, userAgent, clientIP, reqModel, c, subject)
+	}
 
 	maxAccountSwitches := h.maxAccountSwitches
 	switchCount := 0
@@ -195,12 +221,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		forwardStart := time.Now()
 
 		defaultMappedModel := resolveOpenAIForwardDefaultMappedModel(apiKey, c.GetString("openai_chat_completions_fallback_model"))
-		var result *service.OpenAIForwardResult
-		if routeMode == service.OpenAIChatRouteModeCryptoOnly {
-			result, err = h.gatewayService.ForwardChatCompletionsPassthrough(c.Request.Context(), c, account, body, defaultMappedModel)
-		} else {
-			result, err = h.gatewayService.ForwardAsChatCompletions(c.Request.Context(), c, account, body, promptCacheKey, defaultMappedModel)
-		}
+		result, err := h.gatewayService.ForwardAsChatCompletions(c.Request.Context(), c, account, forwardBody, promptCacheKey, defaultMappedModel)
 
 		forwardDurationMs := time.Since(forwardStart).Milliseconds()
 		if accountReleaseFunc != nil {
@@ -269,40 +290,168 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, nil)
 		}
 
-		userAgent := c.GetHeader("User-Agent")
-		clientIP := ip.GetClientIP(c)
-		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
-		if routeMode == service.OpenAIChatRouteModeCryptoOnly {
-			upstreamEndpoint = EndpointChatCompletions
-		}
-
-		h.submitUsageRecordTask(func(ctx context.Context) {
-			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
-				Result:           result,
-				APIKey:           apiKey,
-				User:             apiKey.User,
-				Account:          account,
-				Subscription:     subscription,
-				InboundEndpoint:  GetInboundEndpoint(c),
-				UpstreamEndpoint: upstreamEndpoint,
-				UserAgent:        userAgent,
-				IPAddress:        clientIP,
-				APIKeyService:    h.apiKeyService,
-			}); err != nil {
-				logger.L().With(
-					zap.String("component", "handler.openai_gateway.chat_completions"),
-					zap.Int64("user_id", subject.UserID),
-					zap.Int64("api_key_id", apiKey.ID),
-					zap.Any("group_id", apiKey.GroupID),
-					zap.String("model", reqModel),
-					zap.Int64("account_id", account.ID),
-				).Error("openai_chat_completions.record_usage_failed", zap.Error(err))
-			}
-		})
+		h.submitOpenAIChatUsageRecord(apiKey, subscription, account, result, userAgent, clientIP, reqModel, c, subject)
 		reqLog.Debug("openai_chat_completions.request_completed",
 			zap.Int64("account_id", account.ID),
 			zap.Int("switch_count", switchCount),
 		)
 		return
 	}
+}
+
+func (h *OpenAIGatewayHandler) prepareCryptoEnhancedChatRequestBody(
+	c *gin.Context,
+	apiKey *service.APIKey,
+	body []byte,
+	reqModel string,
+	streamStarted *bool,
+	reqLog *zap.Logger,
+) (*service.OpenAICryptoChatPreparation, *service.Account, bool) {
+	maxAccountSwitches := h.maxAccountSwitches
+	switchCount := 0
+	failedAccountIDs := make(map[int64]struct{})
+	sameAccountRetryCount := make(map[int64]int)
+	var lastFailoverErr *service.UpstreamFailoverError
+
+	for {
+		reqLog.Debug("openai_chat_completions.crypto_provider_selecting", zap.Int("excluded_account_count", len(failedAccountIDs)))
+		selection, _, err := h.gatewayService.SelectAccountWithSchedulerForChatRoute(
+			c.Request.Context(),
+			apiKey.GroupID,
+			"",
+			"",
+			reqModel,
+			failedAccountIDs,
+			service.OpenAIUpstreamTransportAny,
+			service.OpenAIChatRouteModeCryptoOnly,
+		)
+		if err != nil {
+			reqLog.Warn("openai_chat_completions.crypto_provider_select_failed",
+				zap.Error(err),
+				zap.Int("excluded_account_count", len(failedAccountIDs)),
+			)
+			if len(failedAccountIDs) == 0 {
+				h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "Service temporarily unavailable", *streamStarted)
+			} else if lastFailoverErr != nil {
+				h.handleFailoverExhausted(c, lastFailoverErr, *streamStarted)
+			} else {
+				h.handleStreamingAwareError(c, http.StatusBadGateway, "api_error", "Upstream request failed", *streamStarted)
+			}
+			return nil, nil, false
+		}
+		if selection == nil || selection.Account == nil {
+			h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "No available accounts", *streamStarted)
+			return nil, nil, false
+		}
+
+		account := selection.Account
+		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, "", selection, false, streamStarted, reqLog)
+		if !acquired {
+			return nil, nil, false
+		}
+
+		prepared, err := h.gatewayService.PrepareCryptoEnhancedChatRequest(
+			c.Request.Context(),
+			c,
+			account,
+			body,
+		)
+		if accountReleaseFunc != nil {
+			accountReleaseFunc()
+		}
+		if err == nil {
+			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, nil)
+			return prepared, account, true
+		}
+
+		var failoverErr *service.UpstreamFailoverError
+		if errors.As(err, &failoverErr) {
+			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+			if failoverErr.RetryableOnSameAccount {
+				retryLimit := account.GetPoolModeRetryCount()
+				if sameAccountRetryCount[account.ID] < retryLimit {
+					sameAccountRetryCount[account.ID]++
+					reqLog.Warn("openai_chat_completions.crypto_provider_same_account_retry",
+						zap.Int64("account_id", account.ID),
+						zap.Int("upstream_status", failoverErr.StatusCode),
+						zap.Int("retry_limit", retryLimit),
+						zap.Int("retry_count", sameAccountRetryCount[account.ID]),
+					)
+					select {
+					case <-c.Request.Context().Done():
+						return nil, nil, false
+					case <-time.After(sameAccountRetryDelay):
+					}
+					continue
+				}
+			}
+			h.gatewayService.RecordOpenAIAccountSwitch()
+			failedAccountIDs[account.ID] = struct{}{}
+			lastFailoverErr = failoverErr
+			if switchCount >= maxAccountSwitches {
+				h.handleFailoverExhausted(c, failoverErr, *streamStarted)
+				return nil, nil, false
+			}
+			switchCount++
+			reqLog.Warn("openai_chat_completions.crypto_provider_failover_switching",
+				zap.Int64("account_id", account.ID),
+				zap.Int("upstream_status", failoverErr.StatusCode),
+				zap.Int("switch_count", switchCount),
+				zap.Int("max_switches", maxAccountSwitches),
+			)
+			continue
+		}
+
+		h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+		reqLog.Warn("openai_chat_completions.crypto_provider_prepare_failed",
+			zap.Int64("account_id", account.ID),
+			zap.Error(err),
+		)
+		h.handleStreamingAwareError(c, http.StatusBadGateway, "upstream_error", "Failed to fetch crypto data", *streamStarted)
+		return nil, nil, false
+	}
+}
+
+func (h *OpenAIGatewayHandler) submitOpenAIChatUsageRecord(
+	apiKey *service.APIKey,
+	subscription *service.UserSubscription,
+	account *service.Account,
+	result *service.OpenAIForwardResult,
+	userAgent string,
+	clientIP string,
+	reqModel string,
+	c *gin.Context,
+	subject middleware2.AuthSubject,
+) {
+	if result == nil || apiKey == nil || account == nil {
+		return
+	}
+
+	upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
+	if account.IsOpenAICryptoRouter() {
+		upstreamEndpoint = EndpointChatCompletions
+	}
+	h.submitUsageRecordTask(func(ctx context.Context) {
+		if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
+			Result:           result,
+			APIKey:           apiKey,
+			User:             apiKey.User,
+			Account:          account,
+			Subscription:     subscription,
+			InboundEndpoint:  GetInboundEndpoint(c),
+			UpstreamEndpoint: upstreamEndpoint,
+			UserAgent:        userAgent,
+			IPAddress:        clientIP,
+			APIKeyService:    h.apiKeyService,
+		}); err != nil {
+			logger.L().With(
+				zap.String("component", "handler.openai_gateway.chat_completions"),
+				zap.Int64("user_id", subject.UserID),
+				zap.Int64("api_key_id", apiKey.ID),
+				zap.Any("group_id", apiKey.GroupID),
+				zap.String("model", reqModel),
+				zap.Int64("account_id", account.ID),
+			).Error("openai_chat_completions.record_usage_failed", zap.Error(err))
+		}
+	})
 }

@@ -28,28 +28,68 @@ func detectCryptoProfileMatch(
 	message string,
 	entrypoint string,
 ) *service.CryptoProfileMatchResult {
-	if detector == nil || !detector.Enabled() {
-		return nil
-	}
-
-	trimmed := strings.TrimSpace(message)
-	if trimmed == "" {
-		return nil
-	}
-
 	if reqLog == nil {
 		reqLog = logger.L()
 	}
+
+	trimmed := strings.TrimSpace(message)
+	detectorEnabled := detector != nil && detector.Enabled()
+	if detector == nil || !detectorEnabled {
+		reason := "detector_disabled"
+		if detector == nil {
+			reason = "detector_nil"
+		}
+		reqLog.Info("gateway.crypto_profile_detection_skipped",
+			zap.String("entrypoint", entrypoint),
+			zap.String("reason", reason),
+			zap.Bool("detector_configured", detector != nil),
+			zap.Bool("detector_enabled", detectorEnabled),
+			zap.Int("message_chars", len(trimmed)),
+		)
+		return nil
+	}
+
+	if trimmed == "" {
+		reqLog.Info("gateway.crypto_profile_detection_skipped",
+			zap.String("entrypoint", entrypoint),
+			zap.String("reason", "empty_message"),
+			zap.Bool("detector_configured", true),
+			zap.Bool("detector_enabled", true),
+			zap.Int("message_chars", 0),
+		)
+		return nil
+	}
+
+	reqLog.Info("gateway.crypto_profile_detection_invoking",
+		zap.String("entrypoint", entrypoint),
+		zap.Bool("detector_configured", true),
+		zap.Bool("detector_enabled", true),
+		zap.Int("message_chars", len(trimmed)),
+	)
 
 	result, err := detector.Detect(ctx, trimmed)
 	if err != nil {
 		reqLog.Warn("gateway.crypto_profile_detection_failed",
 			zap.String("entrypoint", entrypoint),
+			zap.Int("message_chars", len(trimmed)),
 			zap.Error(err),
 		)
 		return nil
 	}
-	if result == nil || !result.Matched {
+	if result == nil {
+		reqLog.Info("gateway.crypto_profile_detection_empty_result",
+			zap.String("entrypoint", entrypoint),
+			zap.Int("message_chars", len(trimmed)),
+		)
+		return nil
+	}
+	if !result.Matched {
+		reqLog.Info("gateway.crypto_profile_not_matched",
+			zap.String("entrypoint", entrypoint),
+			zap.String("crypto_profile", result.Profile),
+			zap.String("detector_model", result.Model),
+			zap.Int("message_chars", len(trimmed)),
+		)
 		return result
 	}
 

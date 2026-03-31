@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,6 +32,290 @@ func buildOpenAIChatCompletionsURL(base string) string {
 		return normalized + "/chat/completions"
 	}
 	return normalized + "/v1/chat/completions"
+}
+
+const cryptoEnhancedPromptCacheKeyPrefix = "crypto_cc_"
+
+type OpenAICryptoChatPreparation struct {
+	EnhancedBody   []byte
+	PrefetchResult *OpenAIForwardResult
+}
+
+type openAICryptoChatFetchResult struct {
+	CryptoData     json.RawMessage
+	PrefetchResult *OpenAIForwardResult
+}
+
+func deriveCryptoEnhancedPromptCacheKey(originalPromptCacheKey string, enhancedBody []byte) string {
+	seed := strings.TrimSpace(originalPromptCacheKey)
+	if seed == "" {
+		return ""
+	}
+	if len(bytes.TrimSpace(enhancedBody)) == 0 {
+		return seed
+	}
+
+	normalized := normalizeCompatSeedJSON(json.RawMessage(enhancedBody))
+	if normalized == "" {
+		normalized = string(bytes.TrimSpace(enhancedBody))
+	}
+	sum := sha256.Sum256([]byte(seed + "|" + normalized))
+	return cryptoEnhancedPromptCacheKeyPrefix + hex.EncodeToString(sum[:])
+}
+
+func (s *OpenAIGatewayService) DeriveCryptoEnhancedPromptCacheKey(originalPromptCacheKey string, enhancedBody []byte) string {
+	return deriveCryptoEnhancedPromptCacheKey(originalPromptCacheKey, enhancedBody)
+}
+
+func resolveOpenAICryptoPrefetchModel(account *Account, requestedModel string) string {
+	reqModel := strings.TrimSpace(requestedModel)
+	if account == nil {
+		return reqModel
+	}
+
+	if configuredModel := strings.TrimSpace(account.GetCredential("model")); configuredModel != "" {
+		return configuredModel
+	}
+
+	if mappedModel, matched := account.ResolveMappedModel(reqModel); matched {
+		return strings.TrimSpace(mappedModel)
+	}
+
+	return reqModel
+}
+
+func formatCryptoDataSystemMessage(cryptoData json.RawMessage) string {
+	trimmed := bytes.TrimSpace(cryptoData)
+	if len(trimmed) == 0 {
+		return "Use the following crypto_data as supplemental context for the user's request.\n<crypto_data>\n{}\n</crypto_data>"
+	}
+
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, trimmed); err != nil {
+		compact.Write(trimmed)
+	}
+
+	return "Use the following crypto_data as supplemental context for the user's request.\n<crypto_data>\n" +
+		compact.String() +
+		"\n</crypto_data>"
+}
+
+func injectCryptoDataSystemMessage(body []byte, cryptoData json.RawMessage) ([]byte, error) {
+	var chatReq apicompat.ChatCompletionsRequest
+	if err := json.Unmarshal(body, &chatReq); err != nil {
+		return nil, fmt.Errorf("parse chat completions request: %w", err)
+	}
+
+	systemContent, err := json.Marshal(formatCryptoDataSystemMessage(cryptoData))
+	if err != nil {
+		return nil, fmt.Errorf("marshal crypto data system message: %w", err)
+	}
+
+	insertAt := 0
+	for insertAt < len(chatReq.Messages) {
+		if !strings.EqualFold(strings.TrimSpace(chatReq.Messages[insertAt].Role), "system") {
+			break
+		}
+		insertAt++
+	}
+
+	messages := make([]apicompat.ChatMessage, 0, len(chatReq.Messages)+1)
+	messages = append(messages, chatReq.Messages[:insertAt]...)
+	messages = append(messages, apicompat.ChatMessage{
+		Role:    "system",
+		Content: systemContent,
+	})
+	messages = append(messages, chatReq.Messages[insertAt:]...)
+	chatReq.Messages = messages
+
+	enhancedBody, err := json.Marshal(&chatReq)
+	if err != nil {
+		return nil, fmt.Errorf("marshal enhanced chat completions request: %w", err)
+	}
+	return enhancedBody, nil
+}
+
+func (s *OpenAIGatewayService) PrepareCryptoEnhancedChatRequest(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	body []byte,
+) (*OpenAICryptoChatPreparation, error) {
+	fetchResult, err := s.fetchCryptoDataForChatCompletions(ctx, c, account, body)
+	if err != nil {
+		return nil, err
+	}
+	enhancedBody, err := injectCryptoDataSystemMessage(body, fetchResult.CryptoData)
+	if err != nil {
+		return nil, err
+	}
+
+	return &OpenAICryptoChatPreparation{
+		EnhancedBody:   enhancedBody,
+		PrefetchResult: fetchResult.PrefetchResult,
+	}, nil
+}
+
+func (s *OpenAIGatewayService) PrepareCryptoEnhancedChatRequestBody(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	body []byte,
+) ([]byte, error) {
+	prepared, err := s.PrepareCryptoEnhancedChatRequest(ctx, c, account, body)
+	if err != nil {
+		return nil, err
+	}
+	if prepared == nil {
+		return nil, fmt.Errorf("crypto chat preparation is nil")
+	}
+	return prepared.EnhancedBody, nil
+}
+
+func (s *OpenAIGatewayService) fetchCryptoDataForChatCompletions(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	body []byte,
+) (*openAICryptoChatFetchResult, error) {
+	if account == nil {
+		return nil, fmt.Errorf("account is required")
+	}
+	startTime := time.Now()
+
+	reqModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
+	prefetchModel := resolveOpenAICryptoPrefetchModel(account, reqModel)
+
+	forwardBody := body
+	var err error
+	if prefetchModel != "" && prefetchModel != reqModel {
+		forwardBody, err = sjson.SetBytes(forwardBody, "model", prefetchModel)
+		if err != nil {
+			return nil, fmt.Errorf("set mapped model: %w", err)
+		}
+	}
+	forwardBody, err = sjson.SetBytes(forwardBody, "stream", false)
+	if err != nil {
+		return nil, fmt.Errorf("disable upstream stream: %w", err)
+	}
+
+	token := ""
+	requiresAuth := true
+	if account.IsOpenAICryptoRouter() && account.IsOpenAIApiKey() && strings.TrimSpace(account.GetOpenAIApiKey()) == "" {
+		requiresAuth = false
+	} else {
+		token, _, err = s.GetAccessToken(ctx, account)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	upstreamReq, err := s.buildChatCompletionsPassthroughRequest(ctx, c, account, forwardBody, token, requiresAuth)
+	if err != nil {
+		return nil, err
+	}
+
+	proxyURL := ""
+	if account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+
+	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+	if err != nil {
+		safeErr := sanitizeUpstreamErrorMessage(err.Error())
+		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			Platform:           account.Platform,
+			AccountID:          account.ID,
+			AccountName:        account.Name,
+			UpstreamStatusCode: 0,
+			Passthrough:        true,
+			Kind:               "request_error",
+			Message:            safeErr,
+		})
+		return nil, fmt.Errorf("upstream request failed: %s", safeErr)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+		upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
+		upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
+		if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
+			upstreamDetail := ""
+			if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
+				maxBytes := s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes
+				if maxBytes <= 0 {
+					maxBytes = 2048
+				}
+				upstreamDetail = truncateString(string(respBody), maxBytes)
+			}
+			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+				Platform:           account.Platform,
+				AccountID:          account.ID,
+				AccountName:        account.Name,
+				UpstreamStatusCode: resp.StatusCode,
+				UpstreamRequestID:  resp.Header.Get("x-request-id"),
+				Passthrough:        true,
+				Kind:               "failover",
+				Message:            upstreamMsg,
+				Detail:             upstreamDetail,
+			})
+			if s.rateLimitService != nil {
+				s.rateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+			}
+			return nil, &UpstreamFailoverError{
+				StatusCode:             resp.StatusCode,
+				ResponseBody:           respBody,
+				RetryableOnSameAccount: account.IsPoolMode() && (isPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
+			}
+		}
+		if upstreamMsg == "" {
+			return nil, fmt.Errorf("upstream error: %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("upstream error: %d message=%s", resp.StatusCode, upstreamMsg)
+	}
+
+	maxBytes := resolveUpstreamResponseReadLimit(s.cfg)
+	respBody, err := readUpstreamResponseBodyLimited(resp.Body, maxBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	var payload struct {
+		Model  string               `json:"model"`
+		Usage  *apicompat.ChatUsage `json:"usage"`
+		Crypto struct {
+			CryptoData json.RawMessage `json:"crypto_data"`
+		} `json:"crypto"`
+	}
+	if err := json.Unmarshal(respBody, &payload); err != nil {
+		return nil, fmt.Errorf("parse crypto provider response: %w", err)
+	}
+
+	cryptoData := bytes.TrimSpace(payload.Crypto.CryptoData)
+	if len(cryptoData) == 0 || bytes.Equal(cryptoData, []byte("null")) {
+		return nil, fmt.Errorf("crypto provider response missing crypto.crypto_data")
+	}
+
+	out := make(json.RawMessage, len(cryptoData))
+	copy(out, cryptoData)
+	billingModel := strings.TrimSpace(payload.Model)
+	if billingModel == "" {
+		billingModel = prefetchModel
+	}
+
+	return &openAICryptoChatFetchResult{
+		CryptoData: out,
+		PrefetchResult: &OpenAIForwardResult{
+			RequestID:     resp.Header.Get("x-request-id"),
+			Usage:         openAIUsageFromChatUsage(payload.Usage),
+			Model:         billingModel,
+			BillingModel:  billingModel,
+			UpstreamModel: billingModel,
+			Stream:        false,
+			Duration:      time.Since(startTime),
+		},
+	}, nil
 }
 
 // ForwardAsChatCompletions accepts a Chat Completions request body, converts it
@@ -571,41 +857,9 @@ func (s *OpenAIGatewayService) ForwardChatCompletionsPassthrough(
 		}
 	}
 
-	validatedURL, err := s.validateUpstreamBaseURL(account.GetOpenAIBaseURL())
+	upstreamReq, err := s.buildChatCompletionsPassthroughRequest(ctx, c, account, forwardBody, token, requiresAuth)
 	if err != nil {
 		return nil, err
-	}
-	targetURL := buildOpenAIChatCompletionsURL(validatedURL)
-
-	upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(forwardBody))
-	if err != nil {
-		return nil, err
-	}
-
-	allowTimeoutHeaders := s.isOpenAIPassthroughTimeoutHeadersAllowed()
-	if c != nil && c.Request != nil {
-		for key, values := range c.Request.Header {
-			lower := strings.ToLower(strings.TrimSpace(key))
-			if !isOpenAIPassthroughAllowedRequestHeader(lower, allowTimeoutHeaders) {
-				continue
-			}
-			for _, v := range values {
-				upstreamReq.Header.Add(key, v)
-			}
-		}
-	}
-
-	upstreamReq.Header.Del("authorization")
-	upstreamReq.Header.Del("x-api-key")
-	upstreamReq.Header.Del("x-goog-api-key")
-	if requiresAuth {
-		upstreamReq.Header.Set("authorization", "Bearer "+token)
-	}
-	if customUA := account.GetOpenAIUserAgent(); customUA != "" {
-		upstreamReq.Header.Set("user-agent", customUA)
-	}
-	if upstreamReq.Header.Get("content-type") == "" {
-		upstreamReq.Header.Set("content-type", "application/json")
 	}
 
 	proxyURL := ""
@@ -674,6 +928,54 @@ func (s *OpenAIGatewayService) ForwardChatCompletionsPassthrough(
 	}
 
 	return s.handleChatCompletionsPassthroughSuccess(ctx, resp, c, reqModel, mappedModel, reqStream, includeUsage, startTime)
+}
+
+func (s *OpenAIGatewayService) buildChatCompletionsPassthroughRequest(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	body []byte,
+	token string,
+	requiresAuth bool,
+) (*http.Request, error) {
+	validatedURL, err := s.validateUpstreamBaseURL(account.GetOpenAIBaseURL())
+	if err != nil {
+		return nil, err
+	}
+	targetURL := buildOpenAIChatCompletionsURL(validatedURL)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+
+	allowTimeoutHeaders := s.isOpenAIPassthroughTimeoutHeadersAllowed()
+	if c != nil && c.Request != nil {
+		for key, values := range c.Request.Header {
+			lower := strings.ToLower(strings.TrimSpace(key))
+			if !isOpenAIPassthroughAllowedRequestHeader(lower, allowTimeoutHeaders) {
+				continue
+			}
+			for _, v := range values {
+				req.Header.Add(key, v)
+			}
+		}
+	}
+
+	req.Header.Del("authorization")
+	req.Header.Del("x-api-key")
+	req.Header.Del("x-goog-api-key")
+	if requiresAuth {
+		req.Header.Set("authorization", "Bearer "+token)
+	}
+	if customUA := account.GetOpenAIUserAgent(); customUA != "" {
+		req.Header.Set("user-agent", customUA)
+	}
+	if req.Header.Get("content-type") == "" {
+		req.Header.Set("content-type", "application/json")
+	}
+
+	return req, nil
 }
 
 func (s *OpenAIGatewayService) handleChatCompletionsPassthroughSuccess(
