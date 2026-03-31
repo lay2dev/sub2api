@@ -13,6 +13,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
+	"github.com/Wei-Shaw/sub2api/ent/onchaindeposit"
+	"github.com/Wei-Shaw/sub2api/ent/onchaindepositscanstate"
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
@@ -498,6 +500,208 @@ func init() {
 	idempotencyrecordDescErrorReason := idempotencyrecordFields[6].Descriptor()
 	// idempotencyrecord.ErrorReasonValidator is a validator for the "error_reason" field. It is called by the builders before save.
 	idempotencyrecord.ErrorReasonValidator = idempotencyrecordDescErrorReason.Validators[0].(func(string) error)
+	onchaindepositMixin := schema.OnchainDeposit{}.Mixin()
+	onchaindepositMixinFields0 := onchaindepositMixin[0].Fields()
+	_ = onchaindepositMixinFields0
+	onchaindepositFields := schema.OnchainDeposit{}.Fields()
+	_ = onchaindepositFields
+	// onchaindepositDescCreatedAt is the schema descriptor for created_at field.
+	onchaindepositDescCreatedAt := onchaindepositMixinFields0[0].Descriptor()
+	// onchaindeposit.DefaultCreatedAt holds the default value on creation for the created_at field.
+	onchaindeposit.DefaultCreatedAt = onchaindepositDescCreatedAt.Default.(func() time.Time)
+	// onchaindepositDescUpdatedAt is the schema descriptor for updated_at field.
+	onchaindepositDescUpdatedAt := onchaindepositMixinFields0[1].Descriptor()
+	// onchaindeposit.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	onchaindeposit.DefaultUpdatedAt = onchaindepositDescUpdatedAt.Default.(func() time.Time)
+	// onchaindeposit.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	onchaindeposit.UpdateDefaultUpdatedAt = onchaindepositDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// onchaindepositDescChain is the schema descriptor for chain field.
+	onchaindepositDescChain := onchaindepositFields[1].Descriptor()
+	// onchaindeposit.ChainValidator is a validator for the "chain" field. It is called by the builders before save.
+	onchaindeposit.ChainValidator = func() func(string) error {
+		validators := onchaindepositDescChain.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(chain string) error {
+			for _, fn := range fns {
+				if err := fn(chain); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// onchaindepositDescTokenSymbol is the schema descriptor for token_symbol field.
+	onchaindepositDescTokenSymbol := onchaindepositFields[2].Descriptor()
+	// onchaindeposit.TokenSymbolValidator is a validator for the "token_symbol" field. It is called by the builders before save.
+	onchaindeposit.TokenSymbolValidator = func() func(string) error {
+		validators := onchaindepositDescTokenSymbol.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(token_symbol string) error {
+			for _, fn := range fns {
+				if err := fn(token_symbol); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// onchaindepositDescTokenContract is the schema descriptor for token_contract field.
+	onchaindepositDescTokenContract := onchaindepositFields[3].Descriptor()
+	// onchaindeposit.TokenContractValidator is a validator for the "token_contract" field. It is called by the builders before save.
+	onchaindeposit.TokenContractValidator = func() func(string) error {
+		validators := onchaindepositDescTokenContract.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(token_contract string) error {
+			for _, fn := range fns {
+				if err := fn(token_contract); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// onchaindepositDescTxHash is the schema descriptor for tx_hash field.
+	onchaindepositDescTxHash := onchaindepositFields[4].Descriptor()
+	// onchaindeposit.TxHashValidator is a validator for the "tx_hash" field. It is called by the builders before save.
+	onchaindeposit.TxHashValidator = func() func(string) error {
+		validators := onchaindepositDescTxHash.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(tx_hash string) error {
+			for _, fn := range fns {
+				if err := fn(tx_hash); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// onchaindepositDescBlockHash is the schema descriptor for block_hash field.
+	onchaindepositDescBlockHash := onchaindepositFields[7].Descriptor()
+	// onchaindeposit.BlockHashValidator is a validator for the "block_hash" field. It is called by the builders before save.
+	onchaindeposit.BlockHashValidator = func() func(string) error {
+		validators := onchaindepositDescBlockHash.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(block_hash string) error {
+			for _, fn := range fns {
+				if err := fn(block_hash); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// onchaindepositDescFromAddress is the schema descriptor for from_address field.
+	onchaindepositDescFromAddress := onchaindepositFields[8].Descriptor()
+	// onchaindeposit.FromAddressValidator is a validator for the "from_address" field. It is called by the builders before save.
+	onchaindeposit.FromAddressValidator = func() func(string) error {
+		validators := onchaindepositDescFromAddress.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(from_address string) error {
+			for _, fn := range fns {
+				if err := fn(from_address); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// onchaindepositDescToAddress is the schema descriptor for to_address field.
+	onchaindepositDescToAddress := onchaindepositFields[9].Descriptor()
+	// onchaindeposit.ToAddressValidator is a validator for the "to_address" field. It is called by the builders before save.
+	onchaindeposit.ToAddressValidator = func() func(string) error {
+		validators := onchaindepositDescToAddress.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(to_address string) error {
+			for _, fn := range fns {
+				if err := fn(to_address); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// onchaindepositDescAmountRaw is the schema descriptor for amount_raw field.
+	onchaindepositDescAmountRaw := onchaindepositFields[10].Descriptor()
+	// onchaindeposit.AmountRawValidator is a validator for the "amount_raw" field. It is called by the builders before save.
+	onchaindeposit.AmountRawValidator = func() func(string) error {
+		validators := onchaindepositDescAmountRaw.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(amount_raw string) error {
+			for _, fn := range fns {
+				if err := fn(amount_raw); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// onchaindepositDescStatus is the schema descriptor for status field.
+	onchaindepositDescStatus := onchaindepositFields[12].Descriptor()
+	// onchaindeposit.DefaultStatus holds the default value on creation for the status field.
+	onchaindeposit.DefaultStatus = onchaindepositDescStatus.Default.(string)
+	// onchaindeposit.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	onchaindeposit.StatusValidator = onchaindepositDescStatus.Validators[0].(func(string) error)
+	onchaindepositscanstateMixin := schema.OnchainDepositScanState{}.Mixin()
+	onchaindepositscanstateMixinFields0 := onchaindepositscanstateMixin[0].Fields()
+	_ = onchaindepositscanstateMixinFields0
+	onchaindepositscanstateFields := schema.OnchainDepositScanState{}.Fields()
+	_ = onchaindepositscanstateFields
+	// onchaindepositscanstateDescCreatedAt is the schema descriptor for created_at field.
+	onchaindepositscanstateDescCreatedAt := onchaindepositscanstateMixinFields0[0].Descriptor()
+	// onchaindepositscanstate.DefaultCreatedAt holds the default value on creation for the created_at field.
+	onchaindepositscanstate.DefaultCreatedAt = onchaindepositscanstateDescCreatedAt.Default.(func() time.Time)
+	// onchaindepositscanstateDescUpdatedAt is the schema descriptor for updated_at field.
+	onchaindepositscanstateDescUpdatedAt := onchaindepositscanstateMixinFields0[1].Descriptor()
+	// onchaindepositscanstate.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	onchaindepositscanstate.DefaultUpdatedAt = onchaindepositscanstateDescUpdatedAt.Default.(func() time.Time)
+	// onchaindepositscanstate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	onchaindepositscanstate.UpdateDefaultUpdatedAt = onchaindepositscanstateDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// onchaindepositscanstateDescChain is the schema descriptor for chain field.
+	onchaindepositscanstateDescChain := onchaindepositscanstateFields[0].Descriptor()
+	// onchaindepositscanstate.ChainValidator is a validator for the "chain" field. It is called by the builders before save.
+	onchaindepositscanstate.ChainValidator = func() func(string) error {
+		validators := onchaindepositscanstateDescChain.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(chain string) error {
+			for _, fn := range fns {
+				if err := fn(chain); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// onchaindepositscanstateDescLastScannedBlock is the schema descriptor for last_scanned_block field.
+	onchaindepositscanstateDescLastScannedBlock := onchaindepositscanstateFields[1].Descriptor()
+	// onchaindepositscanstate.DefaultLastScannedBlock holds the default value on creation for the last_scanned_block field.
+	onchaindepositscanstate.DefaultLastScannedBlock = onchaindepositscanstateDescLastScannedBlock.Default.(int64)
 	promocodeFields := schema.PromoCode{}.Fields()
 	_ = promocodeFields
 	// promocodeDescCode is the schema descriptor for code field.

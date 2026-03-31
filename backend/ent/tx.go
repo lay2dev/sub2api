@@ -30,6 +30,10 @@ type Tx struct {
 	Group *GroupClient
 	// IdempotencyRecord is the client for interacting with the IdempotencyRecord builders.
 	IdempotencyRecord *IdempotencyRecordClient
+	// OnchainDeposit is the client for interacting with the OnchainDeposit builders.
+	OnchainDeposit *OnchainDepositClient
+	// OnchainDepositScanState is the client for interacting with the OnchainDepositScanState builders.
+	OnchainDepositScanState *OnchainDepositScanStateClient
 	// PromoCode is the client for interacting with the PromoCode builders.
 	PromoCode *PromoCodeClient
 	// PromoCodeUsage is the client for interacting with the PromoCodeUsage builders.
@@ -195,6 +199,8 @@ func (tx *Tx) init() {
 	tx.ErrorPassthroughRule = NewErrorPassthroughRuleClient(tx.config)
 	tx.Group = NewGroupClient(tx.config)
 	tx.IdempotencyRecord = NewIdempotencyRecordClient(tx.config)
+	tx.OnchainDeposit = NewOnchainDepositClient(tx.config)
+	tx.OnchainDepositScanState = NewOnchainDepositScanStateClient(tx.config)
 	tx.PromoCode = NewPromoCodeClient(tx.config)
 	tx.PromoCodeUsage = NewPromoCodeUsageClient(tx.config)
 	tx.Proxy = NewProxyClient(tx.config)

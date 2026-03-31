@@ -105,6 +105,30 @@ func (f IdempotencyRecordFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.IdempotencyRecordMutation", m)
 }
 
+// The OnchainDepositFunc type is an adapter to allow the use of ordinary
+// function as OnchainDeposit mutator.
+type OnchainDepositFunc func(context.Context, *ent.OnchainDepositMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f OnchainDepositFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.OnchainDepositMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.OnchainDepositMutation", m)
+}
+
+// The OnchainDepositScanStateFunc type is an adapter to allow the use of ordinary
+// function as OnchainDepositScanState mutator.
+type OnchainDepositScanStateFunc func(context.Context, *ent.OnchainDepositScanStateMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f OnchainDepositScanStateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.OnchainDepositScanStateMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.OnchainDepositScanStateMutation", m)
+}
+
 // The PromoCodeFunc type is an adapter to allow the use of ordinary
 // function as PromoCode mutator.
 type PromoCodeFunc func(context.Context, *ent.PromoCodeMutation) (ent.Value, error)
