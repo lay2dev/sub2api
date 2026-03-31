@@ -47,6 +47,13 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 		// BuildInfo provider
 		provideServiceBuildInfo,
 
+		// Explicit providers required by current handler graph
+		service.NewSoraS3Storage,
+		service.NewSoraQuotaService,
+		repository.NewSoraGenerationRepository,
+		service.NewSoraGenerationService,
+		handler.NewSoraClientHandler,
+
 		// Cleanup function provider
 		provideCleanup,
 
