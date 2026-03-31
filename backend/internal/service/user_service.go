@@ -81,6 +81,10 @@ type userAddressLookupRepository interface {
 	FindUsersByBindingAddresses(ctx context.Context, addresses []string) ([]UserAddressMatch, error)
 }
 
+type userAddressListRepository interface {
+	ListBindingAddresses(ctx context.Context) ([]string, error)
+}
+
 // NewUserService 创建用户服务实例
 func NewUserService(userRepo UserRepository, authCacheInvalidator APIKeyAuthCacheInvalidator, billingCache BillingCache) *UserService {
 	return &UserService{
@@ -109,6 +113,14 @@ func (s *UserService) ResolveUserIDByAddress(ctx context.Context, address string
 		return 0, false, nil
 	}
 	return matches[0].UserID, true, nil
+}
+
+func (s *UserService) ListBindingAddresses(ctx context.Context) ([]string, error) {
+	listRepo, ok := s.userRepo.(userAddressListRepository)
+	if !ok {
+		return nil, fmt.Errorf("user repository does not support binding address listing")
+	}
+	return listRepo.ListBindingAddresses(ctx)
 }
 
 // GetFirstAdmin 获取首个管理员用户（用于 Admin API Key 认证）

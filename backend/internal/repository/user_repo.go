@@ -149,6 +149,32 @@ func (r *userRepository) FindUsersByBindingAddresses(ctx context.Context, addres
 	return matches, nil
 }
 
+func (r *userRepository) ListBindingAddresses(ctx context.Context) ([]string, error) {
+	users, err := r.client.User.Query().
+		Where(dbuser.BindingAddressNEQ("")).
+		Select(dbuser.FieldBindingAddress).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	addresses := make([]string, 0, len(users))
+	seen := make(map[string]struct{}, len(users))
+	for _, user := range users {
+		addr := strings.ToLower(strings.TrimSpace(user.BindingAddress))
+		if addr == "" {
+			continue
+		}
+		if _, ok := seen[addr]; ok {
+			continue
+		}
+		seen[addr] = struct{}{}
+		addresses = append(addresses, addr)
+	}
+	sort.Strings(addresses)
+	return addresses, nil
+}
+
 func (r *userRepository) Update(ctx context.Context, userIn *service.User) error {
 	if userIn == nil {
 		return nil

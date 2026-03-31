@@ -21,6 +21,17 @@ func (s *stubDepositUserResolver) ResolveUserIDByAddress(_ context.Context, addr
 	return userID, ok, nil
 }
 
+func (s *stubDepositUserResolver) ListBindingAddresses(_ context.Context) ([]string, error) {
+	if len(s.usersByAddress) == 0 {
+		return nil, nil
+	}
+	addrs := make([]string, 0, len(s.usersByAddress))
+	for addr := range s.usersByAddress {
+		addrs = append(addrs, addr)
+	}
+	return addrs, nil
+}
+
 type stubOnchainDepositRepo struct {
 	scanStates       map[string]int64
 	depositsByLogKey map[string]*OnchainDeposit
@@ -371,4 +382,41 @@ func TestWatcher_AdvancesCursorOnlyAfterChunkSuccess(t *testing.T) {
 	credit := repo.singleCreditCall(t)
 	require.Equal(t, int64(101), credit.userID)
 	require.Equal(t, 1.0, credit.amount)
+}
+
+func TestWatcher_SkipsScanRoundWhenNoWatchAddresses(t *testing.T) {
+	repo := newStubOnchainDepositRepo()
+	repo.scanStates["base"] = 100
+
+	rpc := &stubEVMRPCClient{
+		latest: 120,
+		logs: []EVMTransferLog{
+			{
+				Chain:       "base",
+				Contract:    "0x0000000000000000000000000000000000000usd",
+				BlockNumber: 112,
+				BlockHash:   "0xblock",
+				TXHash:      "0xtx5",
+				LogIndex:    5,
+				FromAddress: "0x0000000000000000000000000000000000000aaa",
+				ToAddress:   "0x0000000000000000000000000000000000000011",
+				ValueRaw:    "1000000",
+			},
+		},
+	}
+	resolver := &stubDepositUserResolver{usersByAddress: map[string]int64{}}
+
+	watcher := NewUSDCDepositWatcherService(repo, resolver, rpc, USDCDepositWatcherConfig{
+		Chain:                  "base",
+		USDCContract:           "0x0000000000000000000000000000000000000usd",
+		ConfirmationsRequired:  6,
+		MaxBlocksPerScanChunk:  50,
+		USDCDecimalsMultiplier: 1_000_000,
+	})
+
+	err := watcher.ScanOnce(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, int64(100), repo.scanState("base"))
+	require.Equal(t, 0, repo.creditedCount())
+	require.Empty(t, rpc.filters)
 }

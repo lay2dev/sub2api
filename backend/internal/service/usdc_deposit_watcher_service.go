@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"reflect"
 	"sort"
 	"strings"
 )
@@ -14,6 +13,7 @@ const defaultUSDCDecimalsMultiplier int64 = 1_000_000
 
 type DepositUserResolver interface {
 	ResolveUserIDByAddress(ctx context.Context, address string) (int64, bool, error)
+	ListBindingAddresses(ctx context.Context) ([]string, error)
 }
 
 type USDCDepositWatcherConfig struct {
@@ -86,6 +86,9 @@ func (s *USDCDepositWatcherService) ScanOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if len(watchAddresses) == 0 {
+		return nil
+	}
 
 	for from := cursor + 1; from <= safeBlock; {
 		to := from + s.cfg.MaxBlocksPerScanChunk - 1
@@ -110,19 +113,6 @@ func (s *USDCDepositWatcherService) ScanOnce(ctx context.Context) error {
 }
 
 func (s *USDCDepositWatcherService) scanChunk(ctx context.Context, from, to uint64, watchAddresses []string) error {
-	if len(watchAddresses) == 0 {
-		logs, err := s.rpcClient.GetERC20TransferLogs(ctx, EVMTransferLogFilter{
-			Chain:     s.cfg.Chain,
-			Contract:  s.cfg.USDCContract,
-			FromBlock: from,
-			ToBlock:   to,
-		})
-		if err != nil {
-			return err
-		}
-		return s.processLogs(ctx, logs)
-	}
-
 	for _, toAddress := range watchAddresses {
 		logs, err := s.rpcClient.GetERC20TransferLogs(ctx, EVMTransferLogFilter{
 			Chain:     s.cfg.Chain,
@@ -239,37 +229,12 @@ func normalizeAddress(address string) string {
 	return strings.ToLower(strings.TrimSpace(address))
 }
 
-type bindingAddressLister interface {
-	ListBindingAddresses(ctx context.Context) ([]string, error)
-}
-
 func (s *USDCDepositWatcherService) resolveWatchAddresses(ctx context.Context) ([]string, error) {
-	if lister, ok := s.userResolver.(bindingAddressLister); ok {
-		addrs, err := lister.ListBindingAddresses(ctx)
-		if err != nil {
-			return nil, err
-		}
-		return normalizeAddresses(addrs), nil
+	addrs, err := s.userResolver.ListBindingAddresses(ctx)
+	if err != nil {
+		return nil, err
 	}
-
-	// Backward-compatible path for the in-package unit-test stub.
-	v := reflect.ValueOf(s.userResolver)
-	if v.Kind() == reflect.Pointer {
-		v = v.Elem()
-	}
-	if v.IsValid() && v.Kind() == reflect.Struct {
-		field := v.FieldByName("usersByAddress")
-		if field.IsValid() && field.Kind() == reflect.Map && field.Type().Key().Kind() == reflect.String {
-			keys := make([]string, 0, field.Len())
-			iter := field.MapRange()
-			for iter.Next() {
-				keys = append(keys, iter.Key().String())
-			}
-			return normalizeAddresses(keys), nil
-		}
-	}
-
-	return nil, nil
+	return normalizeAddresses(addrs), nil
 }
 
 func normalizeAddresses(addresses []string) []string {
