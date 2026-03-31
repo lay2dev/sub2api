@@ -420,3 +420,8 @@ func TestWatcher_SkipsScanRoundWhenNoWatchAddresses(t *testing.T) {
 	require.Equal(t, 0, repo.creditedCount())
 	require.Empty(t, rpc.filters)
 }
+
+func TestUSDCDepositWatcherService_StopIsSafe(t *testing.T) {
+	svc := NewUSDCDepositWatcherService(nil, nil, nil, USDCDepositWatcherConfig{})
+	require.NotPanics(t, func() { svc.Stop() })
+}

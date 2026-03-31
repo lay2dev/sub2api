@@ -169,6 +169,55 @@ func ProvideDeferredService(accountRepo AccountRepository, timingWheel *TimingWh
 	return svc
 }
 
+func ProvideUSDCDepositWatcherService(
+	userResolver DepositUserResolver,
+	depositRepo OnchainDepositRepository,
+	rpcClient EVMRPCClient,
+	cfg *config.Config,
+) *USDCDepositWatcherService {
+	watcherCfg := USDCDepositWatcherConfig{}
+	if cfg != nil {
+		watcherCfg.MaxBlocksPerScanChunk = cfg.Wallet.Deposits.ScanChunkSize
+		watcherCfg.PollInterval = time.Duration(cfg.Wallet.Deposits.PollIntervalSeconds) * time.Second
+		watcherCfg.RequestTimeout = time.Duration(cfg.Wallet.Deposits.RequestTimeoutSeconds) * time.Second
+		if chainName, chainCfg, ok := selectEnabledWalletDepositChain(cfg); ok {
+			watcherCfg.Chain = chainName
+			watcherCfg.USDCContract = chainCfg.USDCContractAddress
+			watcherCfg.ConfirmationsRequired = chainCfg.Confirmations
+		}
+	}
+
+	svc := NewUSDCDepositWatcherService(depositRepo, userResolver, rpcClient, watcherCfg)
+	svc.Start()
+	return svc
+}
+
+func ProvideDepositUserResolver(userSvc *UserService) DepositUserResolver {
+	return userSvc
+}
+
+func selectEnabledWalletDepositChain(cfg *config.Config) (string, config.WalletDepositChainConfig, bool) {
+	if cfg == nil || !cfg.Wallet.Deposits.Enabled {
+		return "", config.WalletDepositChainConfig{}, false
+	}
+
+	chains := []struct {
+		name string
+		cfg  config.WalletDepositChainConfig
+	}{
+		{name: "bsc", cfg: cfg.Wallet.Deposits.Chains.BSC},
+		{name: "arbitrum", cfg: cfg.Wallet.Deposits.Chains.Arbitrum},
+		{name: "base", cfg: cfg.Wallet.Deposits.Chains.Base},
+	}
+
+	for _, chain := range chains {
+		if chain.cfg.Enabled {
+			return chain.name, chain.cfg, true
+		}
+	}
+	return "", config.WalletDepositChainConfig{}, false
+}
+
 // ProvideConcurrencyService creates ConcurrencyService and starts slot cleanup worker.
 func ProvideConcurrencyService(cache ConcurrencyCache, accountRepo AccountRepository, cfg *config.Config) *ConcurrencyService {
 	svc := NewConcurrencyService(cache)
@@ -479,6 +528,8 @@ var ProviderSet = wire.NewSet(
 	ProvideDashboardAggregationService,
 	ProvideUsageCleanupService,
 	ProvideDeferredService,
+	ProvideDepositUserResolver,
+	ProvideUSDCDepositWatcherService,
 	NewAntigravityQuotaFetcher,
 	NewUserAttributeService,
 	NewUsageCache,

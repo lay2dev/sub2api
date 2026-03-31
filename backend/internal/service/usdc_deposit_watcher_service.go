@@ -3,10 +3,13 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"math/big"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 )
 
 const defaultUSDCDecimalsMultiplier int64 = 1_000_000
@@ -22,6 +25,8 @@ type USDCDepositWatcherConfig struct {
 	ConfirmationsRequired  uint64
 	MaxBlocksPerScanChunk  uint64
 	USDCDecimalsMultiplier int64
+	PollInterval           time.Duration
+	RequestTimeout         time.Duration
 }
 
 type USDCDepositWatcherService struct {
@@ -29,6 +34,10 @@ type USDCDepositWatcherService struct {
 	userResolver DepositUserResolver
 	rpcClient    EVMRPCClient
 	cfg          USDCDepositWatcherConfig
+	stopCh       chan struct{}
+	stopOnce     sync.Once
+	startOnce    sync.Once
+	wg           sync.WaitGroup
 }
 
 func NewUSDCDepositWatcherService(
@@ -51,6 +60,61 @@ func NewUSDCDepositWatcherService(
 		userResolver: userResolver,
 		rpcClient:    rpcClient,
 		cfg:          cfg,
+		stopCh:       make(chan struct{}),
+	}
+}
+
+func (s *USDCDepositWatcherService) Start() {
+	if s == nil || s.depositRepo == nil || s.userResolver == nil || s.rpcClient == nil {
+		return
+	}
+	if s.cfg.Chain == "" || s.cfg.USDCContract == "" || s.cfg.PollInterval <= 0 {
+		return
+	}
+
+	s.startOnce.Do(func() {
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.scanRound()
+
+			ticker := time.NewTicker(s.cfg.PollInterval)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ticker.C:
+					s.scanRound()
+				case <-s.stopCh:
+					return
+				}
+			}
+		}()
+	})
+}
+
+func (s *USDCDepositWatcherService) Stop() {
+	if s == nil {
+		return
+	}
+	s.stopOnce.Do(func() {
+		if s.stopCh != nil {
+			close(s.stopCh)
+		}
+	})
+	s.wg.Wait()
+}
+
+func (s *USDCDepositWatcherService) scanRound() {
+	ctx := context.Background()
+	cancel := func() {}
+	if s.cfg.RequestTimeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, s.cfg.RequestTimeout)
+	}
+	defer cancel()
+
+	if err := s.ScanOnce(ctx); err != nil {
+		log.Printf("[USDCDepositWatcher] scan failed for chain=%s: %v", s.cfg.Chain, err)
 	}
 }
 
