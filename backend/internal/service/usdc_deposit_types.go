@@ -2,6 +2,7 @@ package service
 
 type EVMTransferLog struct {
 	Chain       string
+	Contract    string
 	BlockNumber uint64
 	BlockHash   string
 	TXHash      string
@@ -14,6 +15,7 @@ type EVMTransferLog struct {
 type EVMTransferLogFilter struct {
 	Chain     string
 	Contract  string
+	ToAddress string
 	FromBlock uint64
 	ToBlock   uint64
 }

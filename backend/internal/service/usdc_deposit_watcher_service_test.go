@@ -25,8 +25,13 @@ type stubOnchainDepositRepo struct {
 	scanStates       map[string]int64
 	depositsByLogKey map[string]*OnchainDeposit
 	nextID           int64
-	creditCalls      map[int64]int
+	creditCalls      map[int64]creditCall
 	upsertErr        error
+}
+
+type creditCall struct {
+	userID int64
+	amount float64
 }
 
 func newStubOnchainDepositRepo() *stubOnchainDepositRepo {
@@ -34,7 +39,7 @@ func newStubOnchainDepositRepo() *stubOnchainDepositRepo {
 		scanStates:       map[string]int64{},
 		depositsByLogKey: map[string]*OnchainDeposit{},
 		nextID:           1,
-		creditCalls:      map[int64]int{},
+		creditCalls:      map[int64]creditCall{},
 	}
 }
 
@@ -77,11 +82,11 @@ func (r *stubOnchainDepositRepo) CreateOrGetDetected(_ context.Context, deposit 
 	return &clone, nil
 }
 
-func (r *stubOnchainDepositRepo) CreditDepositAndBalance(_ context.Context, depositID int64, _ int64, _ float64) error {
+func (r *stubOnchainDepositRepo) CreditDepositAndBalance(_ context.Context, depositID int64, userID int64, amount float64) error {
 	if _, ok := r.creditCalls[depositID]; ok {
 		return nil
 	}
-	r.creditCalls[depositID] = 1
+	r.creditCalls[depositID] = creditCall{userID: userID, amount: amount}
 	for _, d := range r.depositsByLogKey {
 		if d.ID == depositID {
 			d.Status = OnchainDepositStatusCredited
@@ -101,6 +106,16 @@ func (r *stubOnchainDepositRepo) scanState(chain string) int64 {
 
 func (r *stubOnchainDepositRepo) creditedCount() int {
 	return len(r.creditCalls)
+}
+
+func (r *stubOnchainDepositRepo) singleCreditCall(t *testing.T) creditCall {
+	t.Helper()
+	require.Len(t, r.creditCalls, 1)
+	for _, call := range r.creditCalls {
+		return call
+	}
+	t.Fatalf("expected one credit call")
+	return creditCall{}
 }
 
 type stubEVMRPCClient struct {
@@ -127,6 +142,12 @@ func (s *stubEVMRPCClient) GetERC20TransferLogs(_ context.Context, req EVMTransf
 		if !strings.EqualFold(log.Chain, req.Chain) {
 			continue
 		}
+		if req.Contract != "" && !strings.EqualFold(log.Contract, req.Contract) {
+			continue
+		}
+		if req.ToAddress != "" && !strings.EqualFold(log.ToAddress, req.ToAddress) {
+			continue
+		}
 		if log.BlockNumber < req.FromBlock || log.BlockNumber > req.ToBlock {
 			continue
 		}
@@ -144,6 +165,7 @@ func TestWatcher_CreditsMatchedConfirmedTransferOnce(t *testing.T) {
 		logs: []EVMTransferLog{
 			{
 				Chain:       "base",
+				Contract:    "0x0000000000000000000000000000000000000usd",
 				BlockNumber: 112,
 				BlockHash:   "0xblock",
 				TXHash:      "0xtx1",
@@ -154,6 +176,7 @@ func TestWatcher_CreditsMatchedConfirmedTransferOnce(t *testing.T) {
 			},
 			{
 				Chain:       "base",
+				Contract:    "0x0000000000000000000000000000000000000usd",
 				BlockNumber: 112,
 				BlockHash:   "0xblock",
 				TXHash:      "0xtx2",
@@ -161,6 +184,17 @@ func TestWatcher_CreditsMatchedConfirmedTransferOnce(t *testing.T) {
 				FromAddress: "0x0000000000000000000000000000000000000bbb",
 				ToAddress:   "0x0000000000000000000000000000000000000099",
 				ValueRaw:    "2000000",
+			},
+			{
+				Chain:       "base",
+				Contract:    "0x0000000000000000000000000000000000000bad",
+				BlockNumber: 112,
+				BlockHash:   "0xblock",
+				TXHash:      "0xtx-contract-mismatch",
+				LogIndex:    9,
+				FromAddress: "0x0000000000000000000000000000000000000bbb",
+				ToAddress:   "0x0000000000000000000000000000000000000011",
+				ValueRaw:    "1000000",
 			},
 		},
 	}
@@ -181,7 +215,18 @@ func TestWatcher_CreditsMatchedConfirmedTransferOnce(t *testing.T) {
 	err := watcher.ScanOnce(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, 1, repo.creditedCount())
+	credit := repo.singleCreditCall(t)
+	require.Equal(t, int64(101), credit.userID)
+	require.Equal(t, 1.0, credit.amount)
 	require.Equal(t, int64(114), repo.scanState("base"))
+	require.Len(t, rpc.filters, 1)
+	require.Equal(t, EVMTransferLogFilter{
+		Chain:     "base",
+		Contract:  "0x0000000000000000000000000000000000000usd",
+		ToAddress: "0x0000000000000000000000000000000000000011",
+		FromBlock: 101,
+		ToBlock:   114,
+	}, rpc.filters[0])
 }
 
 func TestWatcher_DoesNotCreditBelowConfirmationThreshold(t *testing.T) {
@@ -193,6 +238,7 @@ func TestWatcher_DoesNotCreditBelowConfirmationThreshold(t *testing.T) {
 		logs: []EVMTransferLog{
 			{
 				Chain:       "base",
+				Contract:    "0x0000000000000000000000000000000000000usd",
 				BlockNumber: 115,
 				BlockHash:   "0xblock",
 				TXHash:      "0xtx3",
@@ -221,6 +267,8 @@ func TestWatcher_DoesNotCreditBelowConfirmationThreshold(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, repo.creditedCount())
 	require.Equal(t, int64(114), repo.scanState("base"))
+	require.Len(t, rpc.filters, 1)
+	require.Equal(t, "0x0000000000000000000000000000000000000011", rpc.filters[0].ToAddress)
 }
 
 func TestWatcher_ReprocessingSameLogDoesNotDoubleCredit(t *testing.T) {
@@ -232,6 +280,7 @@ func TestWatcher_ReprocessingSameLogDoesNotDoubleCredit(t *testing.T) {
 		logs: []EVMTransferLog{
 			{
 				Chain:       "base",
+				Contract:    "0x0000000000000000000000000000000000000usd",
 				BlockNumber: 112,
 				BlockHash:   "0xblock",
 				TXHash:      "0xtxdup",
@@ -242,6 +291,7 @@ func TestWatcher_ReprocessingSameLogDoesNotDoubleCredit(t *testing.T) {
 			},
 			{
 				Chain:       "base",
+				Contract:    "0x0000000000000000000000000000000000000usd",
 				BlockNumber: 112,
 				BlockHash:   "0xblock",
 				TXHash:      "0xtxdup",
@@ -269,6 +319,9 @@ func TestWatcher_ReprocessingSameLogDoesNotDoubleCredit(t *testing.T) {
 	err := watcher.ScanOnce(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, 1, repo.creditedCount())
+	credit := repo.singleCreditCall(t)
+	require.Equal(t, int64(101), credit.userID)
+	require.Equal(t, 1.0, credit.amount)
 }
 
 func TestWatcher_AdvancesCursorOnlyAfterChunkSuccess(t *testing.T) {
@@ -281,6 +334,7 @@ func TestWatcher_AdvancesCursorOnlyAfterChunkSuccess(t *testing.T) {
 		logs: []EVMTransferLog{
 			{
 				Chain:       "base",
+				Contract:    "0x0000000000000000000000000000000000000usd",
 				BlockNumber: 112,
 				BlockHash:   "0xblock",
 				TXHash:      "0xtx4",
@@ -314,4 +368,7 @@ func TestWatcher_AdvancesCursorOnlyAfterChunkSuccess(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(114), repo.scanState("base"))
 	require.Equal(t, 1, repo.creditedCount())
+	credit := repo.singleCreditCall(t)
+	require.Equal(t, int64(101), credit.userID)
+	require.Equal(t, 1.0, credit.amount)
 }
