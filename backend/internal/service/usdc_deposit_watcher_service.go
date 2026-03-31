@@ -23,6 +23,7 @@ type USDCDepositWatcherConfig struct {
 	Chain                  string
 	USDCContract           string
 	ConfirmationsRequired  uint64
+	StartBlock             uint64
 	MaxBlocksPerScanChunk  uint64
 	USDCDecimalsMultiplier int64
 	PollInterval           time.Duration
@@ -34,6 +35,7 @@ type USDCDepositWatcherService struct {
 	userResolver DepositUserResolver
 	rpcClient    EVMRPCClient
 	cfg          USDCDepositWatcherConfig
+	children     []*USDCDepositWatcherService
 	stopCh       chan struct{}
 	stopOnce     sync.Once
 	startOnce    sync.Once
@@ -64,8 +66,30 @@ func NewUSDCDepositWatcherService(
 	}
 }
 
+func NewUSDCDepositWatcherServiceGroup(children []*USDCDepositWatcherService) *USDCDepositWatcherService {
+	out := make([]*USDCDepositWatcherService, 0, len(children))
+	for _, child := range children {
+		if child == nil {
+			continue
+		}
+		out = append(out, child)
+	}
+	return &USDCDepositWatcherService{children: out}
+}
+
 func (s *USDCDepositWatcherService) Start() {
-	if s == nil || s.depositRepo == nil || s.userResolver == nil || s.rpcClient == nil {
+	if s == nil {
+		return
+	}
+	if len(s.children) > 0 {
+		s.startOnce.Do(func() {
+			for _, child := range s.children {
+				child.Start()
+			}
+		})
+		return
+	}
+	if s.depositRepo == nil || s.userResolver == nil || s.rpcClient == nil {
 		return
 	}
 	if s.cfg.Chain == "" || s.cfg.USDCContract == "" || s.cfg.PollInterval <= 0 {
@@ -97,6 +121,14 @@ func (s *USDCDepositWatcherService) Stop() {
 	if s == nil {
 		return
 	}
+	if len(s.children) > 0 {
+		s.stopOnce.Do(func() {
+			for _, child := range s.children {
+				child.Stop()
+			}
+		})
+		return
+	}
 	s.stopOnce.Do(func() {
 		if s.stopCh != nil {
 			close(s.stopCh)
@@ -119,6 +151,17 @@ func (s *USDCDepositWatcherService) scanRound() {
 }
 
 func (s *USDCDepositWatcherService) ScanOnce(ctx context.Context) error {
+	if s == nil {
+		return fmt.Errorf("watcher is not initialized")
+	}
+	if len(s.children) > 0 {
+		for _, child := range s.children {
+			if err := child.ScanOnce(ctx); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	if s == nil || s.depositRepo == nil || s.userResolver == nil || s.rpcClient == nil {
 		return fmt.Errorf("watcher dependencies are not initialized")
 	}
@@ -139,6 +182,8 @@ func (s *USDCDepositWatcherService) ScanOnce(ctx context.Context) error {
 	var cursor uint64
 	if scanState != nil && scanState.LastScannedBlock > 0 {
 		cursor = uint64(scanState.LastScannedBlock)
+	} else if s.cfg.StartBlock > 0 {
+		cursor = s.cfg.StartBlock - 1
 	}
 
 	safeBlock := latestBlock - s.cfg.ConfirmationsRequired

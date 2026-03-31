@@ -37,6 +37,21 @@ func ProvideEmailQueueService(emailService *EmailService) *EmailQueueService {
 	return NewEmailQueueService(emailService, 3)
 }
 
+func ProvideAPIKeyService(
+	apiKeyRepo APIKeyRepository,
+	userRepo UserRepository,
+	groupRepo GroupRepository,
+	userSubRepo UserSubscriptionRepository,
+	userGroupRateRepo UserGroupRateRepository,
+	cache APIKeyCache,
+	billingCache BillingCache,
+	cfg *config.Config,
+) *APIKeyService {
+	svc := NewAPIKeyService(apiKeyRepo, userRepo, groupRepo, userSubRepo, userGroupRateRepo, cache, cfg)
+	svc.SetRateLimitCacheInvalidator(billingCache)
+	return svc
+}
+
 // ProvideTokenRefreshService creates and starts TokenRefreshService
 func ProvideTokenRefreshService(
 	accountRepo AccountRepository,
@@ -175,30 +190,40 @@ func ProvideUSDCDepositWatcherService(
 	rpcClient EVMRPCClient,
 	cfg *config.Config,
 ) *USDCDepositWatcherService {
-	watcherCfg := USDCDepositWatcherConfig{}
-	if cfg != nil {
-		watcherCfg.MaxBlocksPerScanChunk = cfg.Wallet.Deposits.ScanChunkSize
-		watcherCfg.PollInterval = time.Duration(cfg.Wallet.Deposits.PollIntervalSeconds) * time.Second
-		watcherCfg.RequestTimeout = time.Duration(cfg.Wallet.Deposits.RequestTimeoutSeconds) * time.Second
-		if chainName, chainCfg, ok := selectEnabledWalletDepositChain(cfg); ok {
-			watcherCfg.Chain = chainName
-			watcherCfg.USDCContract = chainCfg.USDCContractAddress
-			watcherCfg.ConfirmationsRequired = chainCfg.Confirmations
+	watcherCfgs := buildUSDCDepositWatcherConfigs(cfg)
+	switch len(watcherCfgs) {
+	case 0:
+		svc := NewUSDCDepositWatcherService(depositRepo, userResolver, rpcClient, USDCDepositWatcherConfig{})
+		svc.Start()
+		return svc
+	case 1:
+		svc := NewUSDCDepositWatcherService(depositRepo, userResolver, rpcClient, watcherCfgs[0])
+		svc.Start()
+		return svc
+	default:
+		children := make([]*USDCDepositWatcherService, 0, len(watcherCfgs))
+		for _, watcherCfg := range watcherCfgs {
+			children = append(children, NewUSDCDepositWatcherService(depositRepo, userResolver, rpcClient, watcherCfg))
 		}
+		svc := NewUSDCDepositWatcherServiceGroup(children)
+		svc.Start()
+		return svc
 	}
-
-	svc := NewUSDCDepositWatcherService(depositRepo, userResolver, rpcClient, watcherCfg)
-	svc.Start()
-	return svc
 }
 
 func ProvideDepositUserResolver(userSvc *UserService) DepositUserResolver {
 	return userSvc
 }
 
-func selectEnabledWalletDepositChain(cfg *config.Config) (string, config.WalletDepositChainConfig, bool) {
+func buildUSDCDepositWatcherConfigs(cfg *config.Config) []USDCDepositWatcherConfig {
 	if cfg == nil || !cfg.Wallet.Deposits.Enabled {
-		return "", config.WalletDepositChainConfig{}, false
+		return nil
+	}
+
+	baseCfg := USDCDepositWatcherConfig{
+		MaxBlocksPerScanChunk: cfg.Wallet.Deposits.ScanChunkSize,
+		PollInterval:          time.Duration(cfg.Wallet.Deposits.PollIntervalSeconds) * time.Second,
+		RequestTimeout:        time.Duration(cfg.Wallet.Deposits.RequestTimeoutSeconds) * time.Second,
 	}
 
 	chains := []struct {
@@ -210,12 +235,18 @@ func selectEnabledWalletDepositChain(cfg *config.Config) (string, config.WalletD
 		{name: "base", cfg: cfg.Wallet.Deposits.Chains.Base},
 	}
 
+	out := make([]USDCDepositWatcherConfig, 0, len(chains))
 	for _, chain := range chains {
 		if chain.cfg.Enabled {
-			return chain.name, chain.cfg, true
+			watcherCfg := baseCfg
+			watcherCfg.Chain = chain.name
+			watcherCfg.USDCContract = chain.cfg.USDCContractAddress
+			watcherCfg.ConfirmationsRequired = chain.cfg.Confirmations
+			watcherCfg.StartBlock = chain.cfg.StartBlock
+			out = append(out, watcherCfg)
 		}
 	}
-	return "", config.WalletDepositChainConfig{}, false
+	return out
 }
 
 // ProvideConcurrencyService creates ConcurrencyService and starts slot cleanup worker.
@@ -333,6 +364,14 @@ func ProvideOpsSystemLogSink(opsRepo OpsRepository) *OpsSystemLogSink {
 // ProvideSoraMediaStorage 初始化 Sora 媒体存储
 func ProvideSoraMediaStorage(cfg *config.Config) *SoraMediaStorage {
 	return NewSoraMediaStorage(cfg)
+}
+
+func ProvideSoraS3Storage(settingService *SettingService) *SoraS3Storage {
+	storage := NewSoraS3Storage(settingService)
+	if settingService != nil {
+		settingService.SetOnS3UpdateCallback(storage.RefreshClient)
+	}
+	return storage
 }
 
 func ProvideSoraSDKClient(
@@ -459,7 +498,7 @@ var ProviderSet = wire.NewSet(
 	// Core services
 	NewAuthService,
 	NewUserService,
-	NewAPIKeyService,
+	ProvideAPIKeyService,
 	ProvideAPIKeyAuthCacheInvalidator,
 	NewGroupService,
 	NewAccountService,
@@ -476,6 +515,7 @@ var ProviderSet = wire.NewSet(
 	NewOpenRouterCryptoProfileDetector,
 	wire.Bind(new(CryptoProfileDetector), new(*OpenRouterCryptoProfileDetector)),
 	NewGatewayService,
+	ProvideSoraS3Storage,
 	ProvideSoraMediaStorage,
 	ProvideSoraMediaCleanupService,
 	ProvideSoraSDKClient,

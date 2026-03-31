@@ -37,9 +37,8 @@ func ProvidePricingRemoteClient(cfg *config.Config) service.PricingRemoteClient 
 	return NewPricingRemoteClient(cfg.Update.ProxyURL, cfg.Security.ProxyFallback.AllowDirectOnError)
 }
 
-// ProvideEVMRPCClient returns a placeholder EVM RPC client until transport wiring is implemented.
-func ProvideEVMRPCClient(_ *config.Config) service.EVMRPCClient {
-	return nil
+func ProvideEVMRPCClient(cfg *config.Config) service.EVMRPCClient {
+	return NewEVMRPCClient(cfg)
 }
 
 // ProvideSessionLimitCache 创建会话限制缓存

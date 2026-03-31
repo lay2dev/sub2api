@@ -421,6 +421,60 @@ func TestWatcher_SkipsScanRoundWhenNoWatchAddresses(t *testing.T) {
 	require.Empty(t, rpc.filters)
 }
 
+func TestWatcher_HonorsStartBlockOnFirstScanState(t *testing.T) {
+	repo := newStubOnchainDepositRepo()
+
+	rpc := &stubEVMRPCClient{
+		latest: 120,
+		logs: []EVMTransferLog{
+			{
+				Chain:       "base",
+				Contract:    "0x0000000000000000000000000000000000000usd",
+				BlockNumber: 109,
+				BlockHash:   "0xblock",
+				TXHash:      "0xtx-before-start",
+				LogIndex:    1,
+				FromAddress: "0x0000000000000000000000000000000000000aaa",
+				ToAddress:   "0x0000000000000000000000000000000000000011",
+				ValueRaw:    "1000000",
+			},
+			{
+				Chain:       "base",
+				Contract:    "0x0000000000000000000000000000000000000usd",
+				BlockNumber: 110,
+				BlockHash:   "0xblock",
+				TXHash:      "0xtx-at-start",
+				LogIndex:    2,
+				FromAddress: "0x0000000000000000000000000000000000000bbb",
+				ToAddress:   "0x0000000000000000000000000000000000000011",
+				ValueRaw:    "1000000",
+			},
+		},
+	}
+	resolver := &stubDepositUserResolver{
+		usersByAddress: map[string]int64{
+			"0x0000000000000000000000000000000000000011": 101,
+		},
+	}
+
+	watcher := NewUSDCDepositWatcherService(repo, resolver, rpc, USDCDepositWatcherConfig{
+		Chain:                  "base",
+		USDCContract:           "0x0000000000000000000000000000000000000usd",
+		ConfirmationsRequired:  6,
+		MaxBlocksPerScanChunk:  50,
+		StartBlock:             110,
+		USDCDecimalsMultiplier: 1_000_000,
+	})
+
+	err := watcher.ScanOnce(context.Background())
+	require.NoError(t, err)
+	require.Len(t, rpc.filters, 1)
+	require.Equal(t, uint64(110), rpc.filters[0].FromBlock)
+	require.Equal(t, uint64(114), rpc.filters[0].ToBlock)
+	require.Equal(t, int64(114), repo.scanState("base"))
+	require.Equal(t, 1, repo.creditedCount())
+}
+
 func TestUSDCDepositWatcherService_StopIsSafe(t *testing.T) {
 	svc := NewUSDCDepositWatcherService(nil, nil, nil, USDCDepositWatcherConfig{})
 	require.NotPanics(t, func() { svc.Stop() })
