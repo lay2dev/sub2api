@@ -317,6 +317,33 @@ func TestLoadRejectsInvalidWalletBindingMnemonic(t *testing.T) {
 	require.ErrorContains(t, err, "wallet.binding_mnemonic")
 }
 
+func TestLoadWalletDepositsConfigFromEnv(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("WALLET_DEPOSITS_ENABLED", "true")
+	t.Setenv("WALLET_DEPOSITS_CHAINS_BSC_ENABLED", "true")
+	t.Setenv("WALLET_DEPOSITS_CHAINS_BSC_RPC_URL", "https://bsc.example")
+	t.Setenv("WALLET_DEPOSITS_CHAINS_BSC_USDC_CONTRACT_ADDRESS", "0x0000000000000000000000000000000000000001")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.True(t, cfg.Wallet.Deposits.Enabled)
+	require.True(t, cfg.Wallet.Deposits.Chains.BSC.Enabled)
+	require.Equal(t, "https://bsc.example", cfg.Wallet.Deposits.Chains.BSC.RPCURL)
+	require.Equal(t, "0x0000000000000000000000000000000000000001", cfg.Wallet.Deposits.Chains.BSC.USDCContractAddress)
+}
+
+func TestLoadRejectsInvalidWalletDepositUSDCContractAddress(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("WALLET_DEPOSITS_ENABLED", "true")
+	t.Setenv("WALLET_DEPOSITS_CHAINS_BSC_ENABLED", "true")
+	t.Setenv("WALLET_DEPOSITS_CHAINS_BSC_RPC_URL", "https://bsc.example")
+	t.Setenv("WALLET_DEPOSITS_CHAINS_BSC_USDC_CONTRACT_ADDRESS", "not-an-address")
+
+	_, err := Load()
+	require.Error(t, err)
+	require.ErrorContains(t, err, "wallet.deposits.chains.bsc.usdc_contract_address")
+}
+
 func TestLoadDefaultJWTAccessTokenExpireMinutes(t *testing.T) {
 	resetViperWithJWTSecret(t)
 

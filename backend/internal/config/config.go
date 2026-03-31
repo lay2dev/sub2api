@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -897,7 +898,30 @@ type DefaultConfig struct {
 }
 
 type WalletConfig struct {
-	BindingMnemonic string `mapstructure:"binding_mnemonic"`
+	BindingMnemonic string               `mapstructure:"binding_mnemonic"`
+	Deposits        WalletDepositsConfig `mapstructure:"deposits"`
+}
+
+type WalletDepositsConfig struct {
+	Enabled               bool                      `mapstructure:"enabled"`
+	PollIntervalSeconds   int                       `mapstructure:"poll_interval_seconds"`
+	ScanChunkSize         uint64                    `mapstructure:"scan_chunk_size"`
+	RequestTimeoutSeconds int                       `mapstructure:"request_timeout_seconds"`
+	Chains                WalletDepositChainsConfig `mapstructure:"chains"`
+}
+
+type WalletDepositChainsConfig struct {
+	BSC      WalletDepositChainConfig `mapstructure:"bsc"`
+	Arbitrum WalletDepositChainConfig `mapstructure:"arbitrum"`
+	Base     WalletDepositChainConfig `mapstructure:"base"`
+}
+
+type WalletDepositChainConfig struct {
+	Enabled             bool   `mapstructure:"enabled"`
+	RPCURL              string `mapstructure:"rpc_url"`
+	USDCContractAddress string `mapstructure:"usdc_contract_address"`
+	Confirmations       uint64 `mapstructure:"confirmations"`
+	StartBlock          uint64 `mapstructure:"start_block"`
 }
 
 type RateLimitConfig struct {
@@ -1073,6 +1097,9 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	cfg.Log.StacktraceLevel = strings.ToLower(strings.TrimSpace(cfg.Log.StacktraceLevel))
 	cfg.Log.Output.FilePath = strings.TrimSpace(cfg.Log.Output.FilePath)
 	cfg.Wallet.BindingMnemonic = strings.TrimSpace(cfg.Wallet.BindingMnemonic)
+	normalizeWalletDepositChainConfig(&cfg.Wallet.Deposits.Chains.BSC)
+	normalizeWalletDepositChainConfig(&cfg.Wallet.Deposits.Chains.Arbitrum)
+	normalizeWalletDepositChainConfig(&cfg.Wallet.Deposits.Chains.Base)
 
 	// 兼容旧键 gateway.openai_ws.sticky_previous_response_ttl_seconds。
 	// 新键未配置（<=0）时回退旧键；新键优先。
@@ -1290,6 +1317,25 @@ func setDefaults() {
 	viper.SetDefault("default.api_key_prefix", "sk-")
 	viper.SetDefault("default.rate_multiplier", 1.0)
 	viper.SetDefault("wallet.binding_mnemonic", "")
+	viper.SetDefault("wallet.deposits.enabled", false)
+	viper.SetDefault("wallet.deposits.poll_interval_seconds", 30)
+	viper.SetDefault("wallet.deposits.scan_chunk_size", uint64(500))
+	viper.SetDefault("wallet.deposits.request_timeout_seconds", 15)
+	viper.SetDefault("wallet.deposits.chains.bsc.enabled", false)
+	viper.SetDefault("wallet.deposits.chains.bsc.rpc_url", "")
+	viper.SetDefault("wallet.deposits.chains.bsc.usdc_contract_address", "")
+	viper.SetDefault("wallet.deposits.chains.bsc.confirmations", uint64(15))
+	viper.SetDefault("wallet.deposits.chains.bsc.start_block", uint64(0))
+	viper.SetDefault("wallet.deposits.chains.arbitrum.enabled", false)
+	viper.SetDefault("wallet.deposits.chains.arbitrum.rpc_url", "")
+	viper.SetDefault("wallet.deposits.chains.arbitrum.usdc_contract_address", "")
+	viper.SetDefault("wallet.deposits.chains.arbitrum.confirmations", uint64(20))
+	viper.SetDefault("wallet.deposits.chains.arbitrum.start_block", uint64(0))
+	viper.SetDefault("wallet.deposits.chains.base.enabled", false)
+	viper.SetDefault("wallet.deposits.chains.base.rpc_url", "")
+	viper.SetDefault("wallet.deposits.chains.base.usdc_contract_address", "")
+	viper.SetDefault("wallet.deposits.chains.base.confirmations", uint64(20))
+	viper.SetDefault("wallet.deposits.chains.base.start_block", uint64(0))
 
 	// RateLimit
 	viper.SetDefault("rate_limit.overload_cooldown_minutes", 10)
@@ -1660,6 +1706,26 @@ func (c *Config) Validate() error {
 	}
 	if mnemonic := strings.TrimSpace(c.Wallet.BindingMnemonic); mnemonic != "" && !bip39.IsMnemonicValid(mnemonic) {
 		return fmt.Errorf("wallet.binding_mnemonic must be a valid BIP39 mnemonic")
+	}
+	if c.Wallet.Deposits.Enabled {
+		if c.Wallet.Deposits.PollIntervalSeconds <= 0 {
+			return fmt.Errorf("wallet.deposits.poll_interval_seconds must be positive")
+		}
+		if c.Wallet.Deposits.ScanChunkSize == 0 {
+			return fmt.Errorf("wallet.deposits.scan_chunk_size must be positive")
+		}
+		if c.Wallet.Deposits.RequestTimeoutSeconds <= 0 {
+			return fmt.Errorf("wallet.deposits.request_timeout_seconds must be positive")
+		}
+		if err := validateWalletDepositChain("bsc", c.Wallet.Deposits.Chains.BSC, c.Wallet.Deposits.Enabled); err != nil {
+			return err
+		}
+		if err := validateWalletDepositChain("arbitrum", c.Wallet.Deposits.Chains.Arbitrum, c.Wallet.Deposits.Enabled); err != nil {
+			return err
+		}
+		if err := validateWalletDepositChain("base", c.Wallet.Deposits.Chains.Base, c.Wallet.Deposits.Enabled); err != nil {
+			return err
+		}
 	}
 	if c.Security.CSP.Enabled && strings.TrimSpace(c.Security.CSP.Policy) == "" {
 		return fmt.Errorf("security.csp.policy is required when CSP is enabled")
@@ -2424,4 +2490,30 @@ func warnIfInsecureURL(field, raw string) {
 	if strings.EqualFold(u.Scheme, "http") {
 		slog.Warn("url uses http scheme; use https in production to avoid token leakage", "field", field)
 	}
+}
+
+var evmAddressPattern = regexp.MustCompile(`^0x[0-9a-f]{40}$`)
+
+func normalizeWalletDepositChainConfig(chain *WalletDepositChainConfig) {
+	if chain == nil {
+		return
+	}
+	chain.RPCURL = strings.TrimSpace(chain.RPCURL)
+	chain.USDCContractAddress = strings.ToLower(strings.TrimSpace(chain.USDCContractAddress))
+}
+
+func validateWalletDepositChain(name string, chain WalletDepositChainConfig, depositsEnabled bool) error {
+	if !depositsEnabled || !chain.Enabled {
+		return nil
+	}
+	if err := ValidateAbsoluteHTTPURL(chain.RPCURL); err != nil {
+		return fmt.Errorf("wallet.deposits.chains.%s.rpc_url invalid: %w", name, err)
+	}
+	if !evmAddressPattern.MatchString(chain.USDCContractAddress) {
+		return fmt.Errorf("wallet.deposits.chains.%s.usdc_contract_address must be a valid lowercase EVM address", name)
+	}
+	if chain.Confirmations == 0 {
+		return fmt.Errorf("wallet.deposits.chains.%s.confirmations must be positive", name)
+	}
+	return nil
 }

@@ -838,6 +838,38 @@ wallet:
   # store a per-user mnemonic.
   # 服务端只会在用户记录上保存派生后的地址，不会保存用户助记词。
   binding_mnemonic: ""
+  deposits:
+    # Enable onchain USDC deposit watcher
+    # 是否启用链上 USDC 充值监听
+    enabled: false
+    # Poll interval for background scanning
+    # 后台扫描轮询间隔（秒）
+    poll_interval_seconds: 30
+    # Max block span per eth_getLogs request
+    # 每次 eth_getLogs 扫描的最大区块跨度
+    scan_chunk_size: 500
+    # Per-request timeout for RPC calls
+    # RPC 请求超时（秒）
+    request_timeout_seconds: 15
+    chains:
+      bsc:
+        enabled: false
+        rpc_url: ""
+        usdc_contract_address: ""
+        confirmations: 15
+        start_block: 0
+      arbitrum:
+        enabled: false
+        rpc_url: ""
+        usdc_contract_address: ""
+        confirmations: 20
+        start_block: 0
+      base:
+        enabled: false
+        rpc_url: ""
+        usdc_contract_address: ""
+        confirmations: 20
+        start_block: 0
 
 # =============================================================================
 # LinuxDo Connect OAuth Login (SSO)
