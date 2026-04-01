@@ -60,6 +60,7 @@ func TestUSDCDepositWatcherForkRPC_Compatibility(t *testing.T) {
 
 			latest, err := rpcClient.LatestBlock(ctx, chain.name)
 			require.NoError(t, err)
+			require.Greater(t, latest, uint64(0))
 
 			logs, err := rpcClient.GetERC20TransferLogs(ctx, service.EVMTransferLogFilter{
 				Chain:       chain.name,
@@ -70,6 +71,27 @@ func TestUSDCDepositWatcherForkRPC_Compatibility(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.NotNil(t, logs)
+
+			repo := &forkWatcherRepo{
+				scanStates: map[string]int64{
+					chain.name: int64(latest - 1),
+				},
+			}
+			resolver := &forkWatcherResolver{
+				userIDByAddress: map[string]int64{
+					"0x0000000000000000000000000000000000000001": 1,
+				},
+			}
+			watcher := service.NewUSDCDepositWatcherService(repo, resolver, rpcClient, service.USDCDepositWatcherConfig{
+				Chain:                  chain.name,
+				USDCContract:           chain.usdcContract,
+				ConfirmationsRequired:  0,
+				StartBlock:             latest,
+				MaxBlocksPerScanChunk:  1,
+				USDCDecimalsMultiplier: 1_000_000,
+			})
+			require.NoError(t, watcher.ScanOnce(ctx))
+			require.Equal(t, int64(latest), repo.scanStates[chain.name])
 		})
 	}
 }
@@ -111,4 +133,55 @@ func buildForkRPCConfig(chain, rpcURL, usdcContract string, confirmations uint64
 	}
 
 	return cfg
+}
+
+type forkWatcherResolver struct {
+	userIDByAddress map[string]int64
+}
+
+func (r *forkWatcherResolver) ResolveUserIDByAddress(_ context.Context, address string) (int64, bool, error) {
+	userID, ok := r.userIDByAddress[strings.ToLower(address)]
+	return userID, ok, nil
+}
+
+func (r *forkWatcherResolver) ListBindingAddresses(_ context.Context) ([]string, error) {
+	out := make([]string, 0, len(r.userIDByAddress))
+	for address := range r.userIDByAddress {
+		out = append(out, address)
+	}
+	return out, nil
+}
+
+type forkWatcherRepo struct {
+	scanStates map[string]int64
+}
+
+func (r *forkWatcherRepo) GetByID(_ context.Context, _ int64) (*service.OnchainDeposit, error) {
+	return nil, nil
+}
+
+func (r *forkWatcherRepo) GetScanState(_ context.Context, chain string) (*service.OnchainDepositScanState, error) {
+	return &service.OnchainDepositScanState{
+		Chain:            chain,
+		LastScannedBlock: r.scanStates[chain],
+	}, nil
+}
+
+func (r *forkWatcherRepo) UpsertScanState(_ context.Context, chain string, lastScannedBlock int64) error {
+	r.scanStates[chain] = lastScannedBlock
+	return nil
+}
+
+func (r *forkWatcherRepo) CreateOrGetDetected(_ context.Context, deposit *service.OnchainDeposit) (*service.OnchainDeposit, error) {
+	cloned := *deposit
+	cloned.ID = 1
+	return &cloned, nil
+}
+
+func (r *forkWatcherRepo) CreditDepositAndBalance(_ context.Context, _ int64, _ int64, _ float64) error {
+	return nil
+}
+
+func (r *forkWatcherRepo) ListPendingFailed(_ context.Context, _ string, _ int) ([]service.OnchainDeposit, error) {
+	return nil, nil
 }

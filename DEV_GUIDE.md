@@ -59,6 +59,7 @@ go test -tags=integration ./internal/service -run 'TestUSDCDepositWatcherForkRPC
 ```
 
 You can set any subset of these env vars. Missing chain env vars are skipped and do not fail the test run.
+For a single chain check, set only one env var (for example `BASE_FORK_RPC_URL`) and run the same command.
 
 Frontend:
 
