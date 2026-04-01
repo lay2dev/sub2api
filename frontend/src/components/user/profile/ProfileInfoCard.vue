@@ -40,6 +40,31 @@
           <Icon name="user" size="sm" class="text-gray-400 dark:text-gray-500" />
           <span class="truncate">{{ user.username }}</span>
         </div>
+        <div
+          v-if="user?.binding_address"
+          class="flex items-start gap-3 text-sm text-gray-600 dark:text-gray-400"
+        >
+          <Icon name="link" size="sm" class="mt-0.5 text-gray-400 dark:text-gray-500" />
+          <div class="min-w-0 flex-1">
+            <div class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+              {{ t('profile.bindingAddress') }}
+            </div>
+            <div class="mt-1 flex items-center gap-2">
+              <span class="min-w-0 break-all font-mono text-xs text-gray-700 dark:text-gray-300">
+                {{ user.binding_address }}
+              </span>
+              <button
+                type="button"
+                class="inline-flex flex-shrink-0 items-center rounded-md p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-dark-700 dark:hover:text-gray-200"
+                :title="t('profile.copyBindingAddress')"
+                data-testid="copy-binding-address"
+                @click="handleCopyBindingAddress"
+              >
+                <Icon name="copy" size="sm" :stroke-width="2" />
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -48,11 +73,18 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
+import { useClipboard } from '@/composables/useClipboard'
 import type { User } from '@/types'
 
-defineProps<{
+const props = defineProps<{
   user: User | null
 }>()
 
 const { t } = useI18n()
+const { copyToClipboard } = useClipboard()
+
+function handleCopyBindingAddress() {
+  if (!props.user?.binding_address) return
+  void copyToClipboard(props.user.binding_address, t('profile.bindingAddressCopied'))
+}
 </script>
