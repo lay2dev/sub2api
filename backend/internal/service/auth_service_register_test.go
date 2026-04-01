@@ -319,6 +319,32 @@ func TestAuthService_Register_Success(t *testing.T) {
 	require.True(t, user.CheckPassword("password"))
 }
 
+func TestAuthService_Register_AssignsBindingAddressWhenMnemonicConfigured(t *testing.T) {
+	repo := &userRepoStub{nextID: 5}
+	service := newAuthService(repo, map[string]string{
+		SettingKeyRegistrationEnabled: "true",
+	}, nil)
+	service.cfg.Wallet.BindingMnemonic = testBindingMnemonic
+
+	_, user, err := service.Register(context.Background(), "user@test.com", "password")
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Equal(t, repo.updated[len(repo.updated)-1].BindingAddress, user.BindingAddress)
+	require.Regexp(t, "^0x[0-9a-f]{40}$", user.BindingAddress)
+}
+
+func TestAuthService_Register_AllowsEmptyMnemonicWithoutBindingAddress(t *testing.T) {
+	repo := &userRepoStub{nextID: 5}
+	service := newAuthService(repo, map[string]string{
+		SettingKeyRegistrationEnabled: "true",
+	}, nil)
+
+	_, user, err := service.Register(context.Background(), "user@test.com", "password")
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Empty(t, user.BindingAddress)
+}
+
 func TestAuthService_ValidateToken_ExpiredReturnsClaimsWithError(t *testing.T) {
 	repo := &userRepoStub{}
 	service := newAuthService(repo, nil, nil)

@@ -47,6 +47,12 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 		// BuildInfo provider
 		provideServiceBuildInfo,
 
+		// Explicit providers required by current handler graph
+		service.NewSoraQuotaService,
+		repository.NewSoraGenerationRepository,
+		service.NewSoraGenerationService,
+		handler.NewSoraClientHandler,
+
 		// Cleanup function provider
 		provideCleanup,
 
@@ -81,6 +87,7 @@ func provideCleanup(
 	tokenRefresh *service.TokenRefreshService,
 	accountExpiry *service.AccountExpiryService,
 	subscriptionExpiry *service.SubscriptionExpiryService,
+	usdcDepositWatcher *service.USDCDepositWatcherService,
 	usageCleanup *service.UsageCleanupService,
 	idempotencyCleanup *service.IdempotencyCleanupService,
 	pricing *service.PricingService,
@@ -177,6 +184,12 @@ func provideCleanup(
 			}},
 			{"SubscriptionExpiryService", func() error {
 				subscriptionExpiry.Stop()
+				return nil
+			}},
+			{"USDCDepositWatcherService", func() error {
+				if usdcDepositWatcher != nil {
+					usdcDepositWatcher.Stop()
+				}
 				return nil
 			}},
 			{"SubscriptionService", func() error {

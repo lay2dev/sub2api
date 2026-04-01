@@ -20,6 +20,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
+	"github.com/Wei-Shaw/sub2api/ent/onchaindeposit"
+	"github.com/Wei-Shaw/sub2api/ent/onchaindepositscanstate"
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
@@ -54,6 +56,8 @@ const (
 	TypeErrorPassthroughRule    = "ErrorPassthroughRule"
 	TypeGroup                   = "Group"
 	TypeIdempotencyRecord       = "IdempotencyRecord"
+	TypeOnchainDeposit          = "OnchainDeposit"
+	TypeOnchainDepositScanState = "OnchainDepositScanState"
 	TypePromoCode               = "PromoCode"
 	TypePromoCodeUsage          = "PromoCodeUsage"
 	TypeProxy                   = "Proxy"
@@ -12534,6 +12538,1896 @@ func (m *IdempotencyRecordMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown IdempotencyRecord edge %s", name)
 }
 
+// OnchainDepositMutation represents an operation that mutates the OnchainDeposit nodes in the graph.
+type OnchainDepositMutation struct {
+	config
+	op               Op
+	typ              string
+	id               *int64
+	created_at       *time.Time
+	updated_at       *time.Time
+	user_id          *int64
+	adduser_id       *int64
+	chain            *string
+	token_symbol     *string
+	token_contract   *string
+	tx_hash          *string
+	log_index        *int64
+	addlog_index     *int64
+	block_number     *int64
+	addblock_number  *int64
+	block_hash       *string
+	from_address     *string
+	to_address       *string
+	amount_raw       *string
+	amount_credit    *float64
+	addamount_credit *float64
+	status           *string
+	credited_at      *time.Time
+	error_message    *string
+	clearedFields    map[string]struct{}
+	done             bool
+	oldValue         func(context.Context) (*OnchainDeposit, error)
+	predicates       []predicate.OnchainDeposit
+}
+
+var _ ent.Mutation = (*OnchainDepositMutation)(nil)
+
+// onchaindepositOption allows management of the mutation configuration using functional options.
+type onchaindepositOption func(*OnchainDepositMutation)
+
+// newOnchainDepositMutation creates new mutation for the OnchainDeposit entity.
+func newOnchainDepositMutation(c config, op Op, opts ...onchaindepositOption) *OnchainDepositMutation {
+	m := &OnchainDepositMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeOnchainDeposit,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withOnchainDepositID sets the ID field of the mutation.
+func withOnchainDepositID(id int64) onchaindepositOption {
+	return func(m *OnchainDepositMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *OnchainDeposit
+		)
+		m.oldValue = func(ctx context.Context) (*OnchainDeposit, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().OnchainDeposit.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withOnchainDeposit sets the old OnchainDeposit of the mutation.
+func withOnchainDeposit(node *OnchainDeposit) onchaindepositOption {
+	return func(m *OnchainDepositMutation) {
+		m.oldValue = func(context.Context) (*OnchainDeposit, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m OnchainDepositMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m OnchainDepositMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *OnchainDepositMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *OnchainDepositMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().OnchainDeposit.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *OnchainDepositMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *OnchainDepositMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *OnchainDepositMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *OnchainDepositMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *OnchainDepositMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *OnchainDepositMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *OnchainDepositMutation) SetUserID(i int64) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *OnchainDepositMutation) UserID() (r int64, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *OnchainDepositMutation) AddUserID(i int64) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *OnchainDepositMutation) AddedUserID() (r int64, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *OnchainDepositMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+}
+
+// SetChain sets the "chain" field.
+func (m *OnchainDepositMutation) SetChain(s string) {
+	m.chain = &s
+}
+
+// Chain returns the value of the "chain" field in the mutation.
+func (m *OnchainDepositMutation) Chain() (r string, exists bool) {
+	v := m.chain
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChain returns the old "chain" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldChain(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChain is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChain requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChain: %w", err)
+	}
+	return oldValue.Chain, nil
+}
+
+// ResetChain resets all changes to the "chain" field.
+func (m *OnchainDepositMutation) ResetChain() {
+	m.chain = nil
+}
+
+// SetTokenSymbol sets the "token_symbol" field.
+func (m *OnchainDepositMutation) SetTokenSymbol(s string) {
+	m.token_symbol = &s
+}
+
+// TokenSymbol returns the value of the "token_symbol" field in the mutation.
+func (m *OnchainDepositMutation) TokenSymbol() (r string, exists bool) {
+	v := m.token_symbol
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTokenSymbol returns the old "token_symbol" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldTokenSymbol(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTokenSymbol is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTokenSymbol requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTokenSymbol: %w", err)
+	}
+	return oldValue.TokenSymbol, nil
+}
+
+// ResetTokenSymbol resets all changes to the "token_symbol" field.
+func (m *OnchainDepositMutation) ResetTokenSymbol() {
+	m.token_symbol = nil
+}
+
+// SetTokenContract sets the "token_contract" field.
+func (m *OnchainDepositMutation) SetTokenContract(s string) {
+	m.token_contract = &s
+}
+
+// TokenContract returns the value of the "token_contract" field in the mutation.
+func (m *OnchainDepositMutation) TokenContract() (r string, exists bool) {
+	v := m.token_contract
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTokenContract returns the old "token_contract" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldTokenContract(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTokenContract is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTokenContract requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTokenContract: %w", err)
+	}
+	return oldValue.TokenContract, nil
+}
+
+// ResetTokenContract resets all changes to the "token_contract" field.
+func (m *OnchainDepositMutation) ResetTokenContract() {
+	m.token_contract = nil
+}
+
+// SetTxHash sets the "tx_hash" field.
+func (m *OnchainDepositMutation) SetTxHash(s string) {
+	m.tx_hash = &s
+}
+
+// TxHash returns the value of the "tx_hash" field in the mutation.
+func (m *OnchainDepositMutation) TxHash() (r string, exists bool) {
+	v := m.tx_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTxHash returns the old "tx_hash" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldTxHash(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTxHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTxHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTxHash: %w", err)
+	}
+	return oldValue.TxHash, nil
+}
+
+// ResetTxHash resets all changes to the "tx_hash" field.
+func (m *OnchainDepositMutation) ResetTxHash() {
+	m.tx_hash = nil
+}
+
+// SetLogIndex sets the "log_index" field.
+func (m *OnchainDepositMutation) SetLogIndex(i int64) {
+	m.log_index = &i
+	m.addlog_index = nil
+}
+
+// LogIndex returns the value of the "log_index" field in the mutation.
+func (m *OnchainDepositMutation) LogIndex() (r int64, exists bool) {
+	v := m.log_index
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLogIndex returns the old "log_index" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldLogIndex(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLogIndex is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLogIndex requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLogIndex: %w", err)
+	}
+	return oldValue.LogIndex, nil
+}
+
+// AddLogIndex adds i to the "log_index" field.
+func (m *OnchainDepositMutation) AddLogIndex(i int64) {
+	if m.addlog_index != nil {
+		*m.addlog_index += i
+	} else {
+		m.addlog_index = &i
+	}
+}
+
+// AddedLogIndex returns the value that was added to the "log_index" field in this mutation.
+func (m *OnchainDepositMutation) AddedLogIndex() (r int64, exists bool) {
+	v := m.addlog_index
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetLogIndex resets all changes to the "log_index" field.
+func (m *OnchainDepositMutation) ResetLogIndex() {
+	m.log_index = nil
+	m.addlog_index = nil
+}
+
+// SetBlockNumber sets the "block_number" field.
+func (m *OnchainDepositMutation) SetBlockNumber(i int64) {
+	m.block_number = &i
+	m.addblock_number = nil
+}
+
+// BlockNumber returns the value of the "block_number" field in the mutation.
+func (m *OnchainDepositMutation) BlockNumber() (r int64, exists bool) {
+	v := m.block_number
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBlockNumber returns the old "block_number" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldBlockNumber(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBlockNumber is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBlockNumber requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBlockNumber: %w", err)
+	}
+	return oldValue.BlockNumber, nil
+}
+
+// AddBlockNumber adds i to the "block_number" field.
+func (m *OnchainDepositMutation) AddBlockNumber(i int64) {
+	if m.addblock_number != nil {
+		*m.addblock_number += i
+	} else {
+		m.addblock_number = &i
+	}
+}
+
+// AddedBlockNumber returns the value that was added to the "block_number" field in this mutation.
+func (m *OnchainDepositMutation) AddedBlockNumber() (r int64, exists bool) {
+	v := m.addblock_number
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBlockNumber resets all changes to the "block_number" field.
+func (m *OnchainDepositMutation) ResetBlockNumber() {
+	m.block_number = nil
+	m.addblock_number = nil
+}
+
+// SetBlockHash sets the "block_hash" field.
+func (m *OnchainDepositMutation) SetBlockHash(s string) {
+	m.block_hash = &s
+}
+
+// BlockHash returns the value of the "block_hash" field in the mutation.
+func (m *OnchainDepositMutation) BlockHash() (r string, exists bool) {
+	v := m.block_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBlockHash returns the old "block_hash" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldBlockHash(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBlockHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBlockHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBlockHash: %w", err)
+	}
+	return oldValue.BlockHash, nil
+}
+
+// ResetBlockHash resets all changes to the "block_hash" field.
+func (m *OnchainDepositMutation) ResetBlockHash() {
+	m.block_hash = nil
+}
+
+// SetFromAddress sets the "from_address" field.
+func (m *OnchainDepositMutation) SetFromAddress(s string) {
+	m.from_address = &s
+}
+
+// FromAddress returns the value of the "from_address" field in the mutation.
+func (m *OnchainDepositMutation) FromAddress() (r string, exists bool) {
+	v := m.from_address
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFromAddress returns the old "from_address" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldFromAddress(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFromAddress is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFromAddress requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFromAddress: %w", err)
+	}
+	return oldValue.FromAddress, nil
+}
+
+// ResetFromAddress resets all changes to the "from_address" field.
+func (m *OnchainDepositMutation) ResetFromAddress() {
+	m.from_address = nil
+}
+
+// SetToAddress sets the "to_address" field.
+func (m *OnchainDepositMutation) SetToAddress(s string) {
+	m.to_address = &s
+}
+
+// ToAddress returns the value of the "to_address" field in the mutation.
+func (m *OnchainDepositMutation) ToAddress() (r string, exists bool) {
+	v := m.to_address
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldToAddress returns the old "to_address" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldToAddress(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldToAddress is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldToAddress requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldToAddress: %w", err)
+	}
+	return oldValue.ToAddress, nil
+}
+
+// ResetToAddress resets all changes to the "to_address" field.
+func (m *OnchainDepositMutation) ResetToAddress() {
+	m.to_address = nil
+}
+
+// SetAmountRaw sets the "amount_raw" field.
+func (m *OnchainDepositMutation) SetAmountRaw(s string) {
+	m.amount_raw = &s
+}
+
+// AmountRaw returns the value of the "amount_raw" field in the mutation.
+func (m *OnchainDepositMutation) AmountRaw() (r string, exists bool) {
+	v := m.amount_raw
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAmountRaw returns the old "amount_raw" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldAmountRaw(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAmountRaw is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAmountRaw requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAmountRaw: %w", err)
+	}
+	return oldValue.AmountRaw, nil
+}
+
+// ResetAmountRaw resets all changes to the "amount_raw" field.
+func (m *OnchainDepositMutation) ResetAmountRaw() {
+	m.amount_raw = nil
+}
+
+// SetAmountCredit sets the "amount_credit" field.
+func (m *OnchainDepositMutation) SetAmountCredit(f float64) {
+	m.amount_credit = &f
+	m.addamount_credit = nil
+}
+
+// AmountCredit returns the value of the "amount_credit" field in the mutation.
+func (m *OnchainDepositMutation) AmountCredit() (r float64, exists bool) {
+	v := m.amount_credit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAmountCredit returns the old "amount_credit" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldAmountCredit(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAmountCredit is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAmountCredit requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAmountCredit: %w", err)
+	}
+	return oldValue.AmountCredit, nil
+}
+
+// AddAmountCredit adds f to the "amount_credit" field.
+func (m *OnchainDepositMutation) AddAmountCredit(f float64) {
+	if m.addamount_credit != nil {
+		*m.addamount_credit += f
+	} else {
+		m.addamount_credit = &f
+	}
+}
+
+// AddedAmountCredit returns the value that was added to the "amount_credit" field in this mutation.
+func (m *OnchainDepositMutation) AddedAmountCredit() (r float64, exists bool) {
+	v := m.addamount_credit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAmountCredit resets all changes to the "amount_credit" field.
+func (m *OnchainDepositMutation) ResetAmountCredit() {
+	m.amount_credit = nil
+	m.addamount_credit = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *OnchainDepositMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *OnchainDepositMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *OnchainDepositMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetCreditedAt sets the "credited_at" field.
+func (m *OnchainDepositMutation) SetCreditedAt(t time.Time) {
+	m.credited_at = &t
+}
+
+// CreditedAt returns the value of the "credited_at" field in the mutation.
+func (m *OnchainDepositMutation) CreditedAt() (r time.Time, exists bool) {
+	v := m.credited_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreditedAt returns the old "credited_at" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldCreditedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreditedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreditedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreditedAt: %w", err)
+	}
+	return oldValue.CreditedAt, nil
+}
+
+// ClearCreditedAt clears the value of the "credited_at" field.
+func (m *OnchainDepositMutation) ClearCreditedAt() {
+	m.credited_at = nil
+	m.clearedFields[onchaindeposit.FieldCreditedAt] = struct{}{}
+}
+
+// CreditedAtCleared returns if the "credited_at" field was cleared in this mutation.
+func (m *OnchainDepositMutation) CreditedAtCleared() bool {
+	_, ok := m.clearedFields[onchaindeposit.FieldCreditedAt]
+	return ok
+}
+
+// ResetCreditedAt resets all changes to the "credited_at" field.
+func (m *OnchainDepositMutation) ResetCreditedAt() {
+	m.credited_at = nil
+	delete(m.clearedFields, onchaindeposit.FieldCreditedAt)
+}
+
+// SetErrorMessage sets the "error_message" field.
+func (m *OnchainDepositMutation) SetErrorMessage(s string) {
+	m.error_message = &s
+}
+
+// ErrorMessage returns the value of the "error_message" field in the mutation.
+func (m *OnchainDepositMutation) ErrorMessage() (r string, exists bool) {
+	v := m.error_message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorMessage returns the old "error_message" field's value of the OnchainDeposit entity.
+// If the OnchainDeposit object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositMutation) OldErrorMessage(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorMessage: %w", err)
+	}
+	return oldValue.ErrorMessage, nil
+}
+
+// ClearErrorMessage clears the value of the "error_message" field.
+func (m *OnchainDepositMutation) ClearErrorMessage() {
+	m.error_message = nil
+	m.clearedFields[onchaindeposit.FieldErrorMessage] = struct{}{}
+}
+
+// ErrorMessageCleared returns if the "error_message" field was cleared in this mutation.
+func (m *OnchainDepositMutation) ErrorMessageCleared() bool {
+	_, ok := m.clearedFields[onchaindeposit.FieldErrorMessage]
+	return ok
+}
+
+// ResetErrorMessage resets all changes to the "error_message" field.
+func (m *OnchainDepositMutation) ResetErrorMessage() {
+	m.error_message = nil
+	delete(m.clearedFields, onchaindeposit.FieldErrorMessage)
+}
+
+// Where appends a list predicates to the OnchainDepositMutation builder.
+func (m *OnchainDepositMutation) Where(ps ...predicate.OnchainDeposit) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the OnchainDepositMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *OnchainDepositMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.OnchainDeposit, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *OnchainDepositMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *OnchainDepositMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (OnchainDeposit).
+func (m *OnchainDepositMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *OnchainDepositMutation) Fields() []string {
+	fields := make([]string, 0, 17)
+	if m.created_at != nil {
+		fields = append(fields, onchaindeposit.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, onchaindeposit.FieldUpdatedAt)
+	}
+	if m.user_id != nil {
+		fields = append(fields, onchaindeposit.FieldUserID)
+	}
+	if m.chain != nil {
+		fields = append(fields, onchaindeposit.FieldChain)
+	}
+	if m.token_symbol != nil {
+		fields = append(fields, onchaindeposit.FieldTokenSymbol)
+	}
+	if m.token_contract != nil {
+		fields = append(fields, onchaindeposit.FieldTokenContract)
+	}
+	if m.tx_hash != nil {
+		fields = append(fields, onchaindeposit.FieldTxHash)
+	}
+	if m.log_index != nil {
+		fields = append(fields, onchaindeposit.FieldLogIndex)
+	}
+	if m.block_number != nil {
+		fields = append(fields, onchaindeposit.FieldBlockNumber)
+	}
+	if m.block_hash != nil {
+		fields = append(fields, onchaindeposit.FieldBlockHash)
+	}
+	if m.from_address != nil {
+		fields = append(fields, onchaindeposit.FieldFromAddress)
+	}
+	if m.to_address != nil {
+		fields = append(fields, onchaindeposit.FieldToAddress)
+	}
+	if m.amount_raw != nil {
+		fields = append(fields, onchaindeposit.FieldAmountRaw)
+	}
+	if m.amount_credit != nil {
+		fields = append(fields, onchaindeposit.FieldAmountCredit)
+	}
+	if m.status != nil {
+		fields = append(fields, onchaindeposit.FieldStatus)
+	}
+	if m.credited_at != nil {
+		fields = append(fields, onchaindeposit.FieldCreditedAt)
+	}
+	if m.error_message != nil {
+		fields = append(fields, onchaindeposit.FieldErrorMessage)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *OnchainDepositMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case onchaindeposit.FieldCreatedAt:
+		return m.CreatedAt()
+	case onchaindeposit.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case onchaindeposit.FieldUserID:
+		return m.UserID()
+	case onchaindeposit.FieldChain:
+		return m.Chain()
+	case onchaindeposit.FieldTokenSymbol:
+		return m.TokenSymbol()
+	case onchaindeposit.FieldTokenContract:
+		return m.TokenContract()
+	case onchaindeposit.FieldTxHash:
+		return m.TxHash()
+	case onchaindeposit.FieldLogIndex:
+		return m.LogIndex()
+	case onchaindeposit.FieldBlockNumber:
+		return m.BlockNumber()
+	case onchaindeposit.FieldBlockHash:
+		return m.BlockHash()
+	case onchaindeposit.FieldFromAddress:
+		return m.FromAddress()
+	case onchaindeposit.FieldToAddress:
+		return m.ToAddress()
+	case onchaindeposit.FieldAmountRaw:
+		return m.AmountRaw()
+	case onchaindeposit.FieldAmountCredit:
+		return m.AmountCredit()
+	case onchaindeposit.FieldStatus:
+		return m.Status()
+	case onchaindeposit.FieldCreditedAt:
+		return m.CreditedAt()
+	case onchaindeposit.FieldErrorMessage:
+		return m.ErrorMessage()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *OnchainDepositMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case onchaindeposit.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case onchaindeposit.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case onchaindeposit.FieldUserID:
+		return m.OldUserID(ctx)
+	case onchaindeposit.FieldChain:
+		return m.OldChain(ctx)
+	case onchaindeposit.FieldTokenSymbol:
+		return m.OldTokenSymbol(ctx)
+	case onchaindeposit.FieldTokenContract:
+		return m.OldTokenContract(ctx)
+	case onchaindeposit.FieldTxHash:
+		return m.OldTxHash(ctx)
+	case onchaindeposit.FieldLogIndex:
+		return m.OldLogIndex(ctx)
+	case onchaindeposit.FieldBlockNumber:
+		return m.OldBlockNumber(ctx)
+	case onchaindeposit.FieldBlockHash:
+		return m.OldBlockHash(ctx)
+	case onchaindeposit.FieldFromAddress:
+		return m.OldFromAddress(ctx)
+	case onchaindeposit.FieldToAddress:
+		return m.OldToAddress(ctx)
+	case onchaindeposit.FieldAmountRaw:
+		return m.OldAmountRaw(ctx)
+	case onchaindeposit.FieldAmountCredit:
+		return m.OldAmountCredit(ctx)
+	case onchaindeposit.FieldStatus:
+		return m.OldStatus(ctx)
+	case onchaindeposit.FieldCreditedAt:
+		return m.OldCreditedAt(ctx)
+	case onchaindeposit.FieldErrorMessage:
+		return m.OldErrorMessage(ctx)
+	}
+	return nil, fmt.Errorf("unknown OnchainDeposit field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *OnchainDepositMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case onchaindeposit.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case onchaindeposit.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case onchaindeposit.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case onchaindeposit.FieldChain:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChain(v)
+		return nil
+	case onchaindeposit.FieldTokenSymbol:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTokenSymbol(v)
+		return nil
+	case onchaindeposit.FieldTokenContract:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTokenContract(v)
+		return nil
+	case onchaindeposit.FieldTxHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTxHash(v)
+		return nil
+	case onchaindeposit.FieldLogIndex:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLogIndex(v)
+		return nil
+	case onchaindeposit.FieldBlockNumber:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBlockNumber(v)
+		return nil
+	case onchaindeposit.FieldBlockHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBlockHash(v)
+		return nil
+	case onchaindeposit.FieldFromAddress:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFromAddress(v)
+		return nil
+	case onchaindeposit.FieldToAddress:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetToAddress(v)
+		return nil
+	case onchaindeposit.FieldAmountRaw:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAmountRaw(v)
+		return nil
+	case onchaindeposit.FieldAmountCredit:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAmountCredit(v)
+		return nil
+	case onchaindeposit.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case onchaindeposit.FieldCreditedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreditedAt(v)
+		return nil
+	case onchaindeposit.FieldErrorMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorMessage(v)
+		return nil
+	}
+	return fmt.Errorf("unknown OnchainDeposit field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *OnchainDepositMutation) AddedFields() []string {
+	var fields []string
+	if m.adduser_id != nil {
+		fields = append(fields, onchaindeposit.FieldUserID)
+	}
+	if m.addlog_index != nil {
+		fields = append(fields, onchaindeposit.FieldLogIndex)
+	}
+	if m.addblock_number != nil {
+		fields = append(fields, onchaindeposit.FieldBlockNumber)
+	}
+	if m.addamount_credit != nil {
+		fields = append(fields, onchaindeposit.FieldAmountCredit)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *OnchainDepositMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case onchaindeposit.FieldUserID:
+		return m.AddedUserID()
+	case onchaindeposit.FieldLogIndex:
+		return m.AddedLogIndex()
+	case onchaindeposit.FieldBlockNumber:
+		return m.AddedBlockNumber()
+	case onchaindeposit.FieldAmountCredit:
+		return m.AddedAmountCredit()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *OnchainDepositMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case onchaindeposit.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	case onchaindeposit.FieldLogIndex:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddLogIndex(v)
+		return nil
+	case onchaindeposit.FieldBlockNumber:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBlockNumber(v)
+		return nil
+	case onchaindeposit.FieldAmountCredit:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAmountCredit(v)
+		return nil
+	}
+	return fmt.Errorf("unknown OnchainDeposit numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *OnchainDepositMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(onchaindeposit.FieldCreditedAt) {
+		fields = append(fields, onchaindeposit.FieldCreditedAt)
+	}
+	if m.FieldCleared(onchaindeposit.FieldErrorMessage) {
+		fields = append(fields, onchaindeposit.FieldErrorMessage)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *OnchainDepositMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *OnchainDepositMutation) ClearField(name string) error {
+	switch name {
+	case onchaindeposit.FieldCreditedAt:
+		m.ClearCreditedAt()
+		return nil
+	case onchaindeposit.FieldErrorMessage:
+		m.ClearErrorMessage()
+		return nil
+	}
+	return fmt.Errorf("unknown OnchainDeposit nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *OnchainDepositMutation) ResetField(name string) error {
+	switch name {
+	case onchaindeposit.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case onchaindeposit.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case onchaindeposit.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case onchaindeposit.FieldChain:
+		m.ResetChain()
+		return nil
+	case onchaindeposit.FieldTokenSymbol:
+		m.ResetTokenSymbol()
+		return nil
+	case onchaindeposit.FieldTokenContract:
+		m.ResetTokenContract()
+		return nil
+	case onchaindeposit.FieldTxHash:
+		m.ResetTxHash()
+		return nil
+	case onchaindeposit.FieldLogIndex:
+		m.ResetLogIndex()
+		return nil
+	case onchaindeposit.FieldBlockNumber:
+		m.ResetBlockNumber()
+		return nil
+	case onchaindeposit.FieldBlockHash:
+		m.ResetBlockHash()
+		return nil
+	case onchaindeposit.FieldFromAddress:
+		m.ResetFromAddress()
+		return nil
+	case onchaindeposit.FieldToAddress:
+		m.ResetToAddress()
+		return nil
+	case onchaindeposit.FieldAmountRaw:
+		m.ResetAmountRaw()
+		return nil
+	case onchaindeposit.FieldAmountCredit:
+		m.ResetAmountCredit()
+		return nil
+	case onchaindeposit.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case onchaindeposit.FieldCreditedAt:
+		m.ResetCreditedAt()
+		return nil
+	case onchaindeposit.FieldErrorMessage:
+		m.ResetErrorMessage()
+		return nil
+	}
+	return fmt.Errorf("unknown OnchainDeposit field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *OnchainDepositMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *OnchainDepositMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *OnchainDepositMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *OnchainDepositMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *OnchainDepositMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *OnchainDepositMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *OnchainDepositMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown OnchainDeposit unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *OnchainDepositMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown OnchainDeposit edge %s", name)
+}
+
+// OnchainDepositScanStateMutation represents an operation that mutates the OnchainDepositScanState nodes in the graph.
+type OnchainDepositScanStateMutation struct {
+	config
+	op                    Op
+	typ                   string
+	id                    *int64
+	created_at            *time.Time
+	updated_at            *time.Time
+	chain                 *string
+	last_scanned_block    *int64
+	addlast_scanned_block *int64
+	clearedFields         map[string]struct{}
+	done                  bool
+	oldValue              func(context.Context) (*OnchainDepositScanState, error)
+	predicates            []predicate.OnchainDepositScanState
+}
+
+var _ ent.Mutation = (*OnchainDepositScanStateMutation)(nil)
+
+// onchaindepositscanstateOption allows management of the mutation configuration using functional options.
+type onchaindepositscanstateOption func(*OnchainDepositScanStateMutation)
+
+// newOnchainDepositScanStateMutation creates new mutation for the OnchainDepositScanState entity.
+func newOnchainDepositScanStateMutation(c config, op Op, opts ...onchaindepositscanstateOption) *OnchainDepositScanStateMutation {
+	m := &OnchainDepositScanStateMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeOnchainDepositScanState,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withOnchainDepositScanStateID sets the ID field of the mutation.
+func withOnchainDepositScanStateID(id int64) onchaindepositscanstateOption {
+	return func(m *OnchainDepositScanStateMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *OnchainDepositScanState
+		)
+		m.oldValue = func(ctx context.Context) (*OnchainDepositScanState, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().OnchainDepositScanState.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withOnchainDepositScanState sets the old OnchainDepositScanState of the mutation.
+func withOnchainDepositScanState(node *OnchainDepositScanState) onchaindepositscanstateOption {
+	return func(m *OnchainDepositScanStateMutation) {
+		m.oldValue = func(context.Context) (*OnchainDepositScanState, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m OnchainDepositScanStateMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m OnchainDepositScanStateMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *OnchainDepositScanStateMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *OnchainDepositScanStateMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().OnchainDepositScanState.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *OnchainDepositScanStateMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *OnchainDepositScanStateMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the OnchainDepositScanState entity.
+// If the OnchainDepositScanState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositScanStateMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *OnchainDepositScanStateMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *OnchainDepositScanStateMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *OnchainDepositScanStateMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the OnchainDepositScanState entity.
+// If the OnchainDepositScanState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositScanStateMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *OnchainDepositScanStateMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetChain sets the "chain" field.
+func (m *OnchainDepositScanStateMutation) SetChain(s string) {
+	m.chain = &s
+}
+
+// Chain returns the value of the "chain" field in the mutation.
+func (m *OnchainDepositScanStateMutation) Chain() (r string, exists bool) {
+	v := m.chain
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChain returns the old "chain" field's value of the OnchainDepositScanState entity.
+// If the OnchainDepositScanState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositScanStateMutation) OldChain(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChain is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChain requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChain: %w", err)
+	}
+	return oldValue.Chain, nil
+}
+
+// ResetChain resets all changes to the "chain" field.
+func (m *OnchainDepositScanStateMutation) ResetChain() {
+	m.chain = nil
+}
+
+// SetLastScannedBlock sets the "last_scanned_block" field.
+func (m *OnchainDepositScanStateMutation) SetLastScannedBlock(i int64) {
+	m.last_scanned_block = &i
+	m.addlast_scanned_block = nil
+}
+
+// LastScannedBlock returns the value of the "last_scanned_block" field in the mutation.
+func (m *OnchainDepositScanStateMutation) LastScannedBlock() (r int64, exists bool) {
+	v := m.last_scanned_block
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastScannedBlock returns the old "last_scanned_block" field's value of the OnchainDepositScanState entity.
+// If the OnchainDepositScanState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OnchainDepositScanStateMutation) OldLastScannedBlock(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastScannedBlock is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastScannedBlock requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastScannedBlock: %w", err)
+	}
+	return oldValue.LastScannedBlock, nil
+}
+
+// AddLastScannedBlock adds i to the "last_scanned_block" field.
+func (m *OnchainDepositScanStateMutation) AddLastScannedBlock(i int64) {
+	if m.addlast_scanned_block != nil {
+		*m.addlast_scanned_block += i
+	} else {
+		m.addlast_scanned_block = &i
+	}
+}
+
+// AddedLastScannedBlock returns the value that was added to the "last_scanned_block" field in this mutation.
+func (m *OnchainDepositScanStateMutation) AddedLastScannedBlock() (r int64, exists bool) {
+	v := m.addlast_scanned_block
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetLastScannedBlock resets all changes to the "last_scanned_block" field.
+func (m *OnchainDepositScanStateMutation) ResetLastScannedBlock() {
+	m.last_scanned_block = nil
+	m.addlast_scanned_block = nil
+}
+
+// Where appends a list predicates to the OnchainDepositScanStateMutation builder.
+func (m *OnchainDepositScanStateMutation) Where(ps ...predicate.OnchainDepositScanState) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the OnchainDepositScanStateMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *OnchainDepositScanStateMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.OnchainDepositScanState, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *OnchainDepositScanStateMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *OnchainDepositScanStateMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (OnchainDepositScanState).
+func (m *OnchainDepositScanStateMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *OnchainDepositScanStateMutation) Fields() []string {
+	fields := make([]string, 0, 4)
+	if m.created_at != nil {
+		fields = append(fields, onchaindepositscanstate.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, onchaindepositscanstate.FieldUpdatedAt)
+	}
+	if m.chain != nil {
+		fields = append(fields, onchaindepositscanstate.FieldChain)
+	}
+	if m.last_scanned_block != nil {
+		fields = append(fields, onchaindepositscanstate.FieldLastScannedBlock)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *OnchainDepositScanStateMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case onchaindepositscanstate.FieldCreatedAt:
+		return m.CreatedAt()
+	case onchaindepositscanstate.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case onchaindepositscanstate.FieldChain:
+		return m.Chain()
+	case onchaindepositscanstate.FieldLastScannedBlock:
+		return m.LastScannedBlock()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *OnchainDepositScanStateMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case onchaindepositscanstate.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case onchaindepositscanstate.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case onchaindepositscanstate.FieldChain:
+		return m.OldChain(ctx)
+	case onchaindepositscanstate.FieldLastScannedBlock:
+		return m.OldLastScannedBlock(ctx)
+	}
+	return nil, fmt.Errorf("unknown OnchainDepositScanState field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *OnchainDepositScanStateMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case onchaindepositscanstate.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case onchaindepositscanstate.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case onchaindepositscanstate.FieldChain:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChain(v)
+		return nil
+	case onchaindepositscanstate.FieldLastScannedBlock:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastScannedBlock(v)
+		return nil
+	}
+	return fmt.Errorf("unknown OnchainDepositScanState field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *OnchainDepositScanStateMutation) AddedFields() []string {
+	var fields []string
+	if m.addlast_scanned_block != nil {
+		fields = append(fields, onchaindepositscanstate.FieldLastScannedBlock)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *OnchainDepositScanStateMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case onchaindepositscanstate.FieldLastScannedBlock:
+		return m.AddedLastScannedBlock()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *OnchainDepositScanStateMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case onchaindepositscanstate.FieldLastScannedBlock:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddLastScannedBlock(v)
+		return nil
+	}
+	return fmt.Errorf("unknown OnchainDepositScanState numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *OnchainDepositScanStateMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *OnchainDepositScanStateMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *OnchainDepositScanStateMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown OnchainDepositScanState nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *OnchainDepositScanStateMutation) ResetField(name string) error {
+	switch name {
+	case onchaindepositscanstate.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case onchaindepositscanstate.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case onchaindepositscanstate.FieldChain:
+		m.ResetChain()
+		return nil
+	case onchaindepositscanstate.FieldLastScannedBlock:
+		m.ResetLastScannedBlock()
+		return nil
+	}
+	return fmt.Errorf("unknown OnchainDepositScanState field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *OnchainDepositScanStateMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *OnchainDepositScanStateMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *OnchainDepositScanStateMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *OnchainDepositScanStateMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *OnchainDepositScanStateMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *OnchainDepositScanStateMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *OnchainDepositScanStateMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown OnchainDepositScanState unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *OnchainDepositScanStateMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown OnchainDepositScanState edge %s", name)
+}
+
 // PromoCodeMutation represents an operation that mutates the PromoCode nodes in the graph.
 type PromoCodeMutation struct {
 	config
@@ -21333,6 +23227,7 @@ type UserMutation struct {
 	concurrency                   *int
 	addconcurrency                *int
 	status                        *string
+	binding_address               *string
 	username                      *string
 	notes                         *string
 	totp_secret_encrypted         *string
@@ -21848,6 +23743,42 @@ func (m *UserMutation) OldStatus(ctx context.Context) (v string, err error) {
 // ResetStatus resets all changes to the "status" field.
 func (m *UserMutation) ResetStatus() {
 	m.status = nil
+}
+
+// SetBindingAddress sets the "binding_address" field.
+func (m *UserMutation) SetBindingAddress(s string) {
+	m.binding_address = &s
+}
+
+// BindingAddress returns the value of the "binding_address" field in the mutation.
+func (m *UserMutation) BindingAddress() (r string, exists bool) {
+	v := m.binding_address
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBindingAddress returns the old "binding_address" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldBindingAddress(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBindingAddress is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBindingAddress requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBindingAddress: %w", err)
+	}
+	return oldValue.BindingAddress, nil
+}
+
+// ResetBindingAddress resets all changes to the "binding_address" field.
+func (m *UserMutation) ResetBindingAddress() {
+	m.binding_address = nil
 }
 
 // SetUsername sets the "username" field.
@@ -22688,7 +24619,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 16)
+	fields := make([]string, 0, 17)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}
@@ -22715,6 +24646,9 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.status != nil {
 		fields = append(fields, user.FieldStatus)
+	}
+	if m.binding_address != nil {
+		fields = append(fields, user.FieldBindingAddress)
 	}
 	if m.username != nil {
 		fields = append(fields, user.FieldUsername)
@@ -22763,6 +24697,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Concurrency()
 	case user.FieldStatus:
 		return m.Status()
+	case user.FieldBindingAddress:
+		return m.BindingAddress()
 	case user.FieldUsername:
 		return m.Username()
 	case user.FieldNotes:
@@ -22804,6 +24740,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldConcurrency(ctx)
 	case user.FieldStatus:
 		return m.OldStatus(ctx)
+	case user.FieldBindingAddress:
+		return m.OldBindingAddress(ctx)
 	case user.FieldUsername:
 		return m.OldUsername(ctx)
 	case user.FieldNotes:
@@ -22889,6 +24827,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
+		return nil
+	case user.FieldBindingAddress:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBindingAddress(v)
 		return nil
 	case user.FieldUsername:
 		v, ok := value.(string)
@@ -23086,6 +25031,9 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldStatus:
 		m.ResetStatus()
+		return nil
+	case user.FieldBindingAddress:
+		m.ResetBindingAddress()
 		return nil
 	case user.FieldUsername:
 		m.ResetUsername()

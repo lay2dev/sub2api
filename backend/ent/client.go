@@ -23,6 +23,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
+	"github.com/Wei-Shaw/sub2api/ent/onchaindeposit"
+	"github.com/Wei-Shaw/sub2api/ent/onchaindepositscanstate"
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
@@ -61,6 +63,10 @@ type Client struct {
 	Group *GroupClient
 	// IdempotencyRecord is the client for interacting with the IdempotencyRecord builders.
 	IdempotencyRecord *IdempotencyRecordClient
+	// OnchainDeposit is the client for interacting with the OnchainDeposit builders.
+	OnchainDeposit *OnchainDepositClient
+	// OnchainDepositScanState is the client for interacting with the OnchainDepositScanState builders.
+	OnchainDepositScanState *OnchainDepositScanStateClient
 	// PromoCode is the client for interacting with the PromoCode builders.
 	PromoCode *PromoCodeClient
 	// PromoCodeUsage is the client for interacting with the PromoCodeUsage builders.
@@ -106,6 +112,8 @@ func (c *Client) init() {
 	c.ErrorPassthroughRule = NewErrorPassthroughRuleClient(c.config)
 	c.Group = NewGroupClient(c.config)
 	c.IdempotencyRecord = NewIdempotencyRecordClient(c.config)
+	c.OnchainDeposit = NewOnchainDepositClient(c.config)
+	c.OnchainDepositScanState = NewOnchainDepositScanStateClient(c.config)
 	c.PromoCode = NewPromoCodeClient(c.config)
 	c.PromoCodeUsage = NewPromoCodeUsageClient(c.config)
 	c.Proxy = NewProxyClient(c.config)
@@ -219,6 +227,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ErrorPassthroughRule:    NewErrorPassthroughRuleClient(cfg),
 		Group:                   NewGroupClient(cfg),
 		IdempotencyRecord:       NewIdempotencyRecordClient(cfg),
+		OnchainDeposit:          NewOnchainDepositClient(cfg),
+		OnchainDepositScanState: NewOnchainDepositScanStateClient(cfg),
 		PromoCode:               NewPromoCodeClient(cfg),
 		PromoCodeUsage:          NewPromoCodeUsageClient(cfg),
 		Proxy:                   NewProxyClient(cfg),
@@ -259,6 +269,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		ErrorPassthroughRule:    NewErrorPassthroughRuleClient(cfg),
 		Group:                   NewGroupClient(cfg),
 		IdempotencyRecord:       NewIdempotencyRecordClient(cfg),
+		OnchainDeposit:          NewOnchainDepositClient(cfg),
+		OnchainDepositScanState: NewOnchainDepositScanStateClient(cfg),
 		PromoCode:               NewPromoCodeClient(cfg),
 		PromoCodeUsage:          NewPromoCodeUsageClient(cfg),
 		Proxy:                   NewProxyClient(cfg),
@@ -302,10 +314,11 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.APIKey, c.Account, c.AccountGroup, c.Announcement, c.AnnouncementRead,
-		c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord, c.PromoCode,
-		c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting,
-		c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
-		c.UserAttributeDefinition, c.UserAttributeValue, c.UserSubscription,
+		c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord, c.OnchainDeposit,
+		c.OnchainDepositScanState, c.PromoCode, c.PromoCodeUsage, c.Proxy,
+		c.RedeemCode, c.SecuritySecret, c.Setting, c.UsageCleanupTask, c.UsageLog,
+		c.User, c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
+		c.UserSubscription,
 	} {
 		n.Use(hooks...)
 	}
@@ -316,10 +329,11 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.APIKey, c.Account, c.AccountGroup, c.Announcement, c.AnnouncementRead,
-		c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord, c.PromoCode,
-		c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting,
-		c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
-		c.UserAttributeDefinition, c.UserAttributeValue, c.UserSubscription,
+		c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord, c.OnchainDeposit,
+		c.OnchainDepositScanState, c.PromoCode, c.PromoCodeUsage, c.Proxy,
+		c.RedeemCode, c.SecuritySecret, c.Setting, c.UsageCleanupTask, c.UsageLog,
+		c.User, c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
+		c.UserSubscription,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -344,6 +358,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Group.mutate(ctx, m)
 	case *IdempotencyRecordMutation:
 		return c.IdempotencyRecord.mutate(ctx, m)
+	case *OnchainDepositMutation:
+		return c.OnchainDeposit.mutate(ctx, m)
+	case *OnchainDepositScanStateMutation:
+		return c.OnchainDepositScanState.mutate(ctx, m)
 	case *PromoCodeMutation:
 		return c.PromoCode.mutate(ctx, m)
 	case *PromoCodeUsageMutation:
@@ -1713,6 +1731,272 @@ func (c *IdempotencyRecordClient) mutate(ctx context.Context, m *IdempotencyReco
 		return (&IdempotencyRecordDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown IdempotencyRecord mutation op: %q", m.Op())
+	}
+}
+
+// OnchainDepositClient is a client for the OnchainDeposit schema.
+type OnchainDepositClient struct {
+	config
+}
+
+// NewOnchainDepositClient returns a client for the OnchainDeposit from the given config.
+func NewOnchainDepositClient(c config) *OnchainDepositClient {
+	return &OnchainDepositClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `onchaindeposit.Hooks(f(g(h())))`.
+func (c *OnchainDepositClient) Use(hooks ...Hook) {
+	c.hooks.OnchainDeposit = append(c.hooks.OnchainDeposit, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `onchaindeposit.Intercept(f(g(h())))`.
+func (c *OnchainDepositClient) Intercept(interceptors ...Interceptor) {
+	c.inters.OnchainDeposit = append(c.inters.OnchainDeposit, interceptors...)
+}
+
+// Create returns a builder for creating a OnchainDeposit entity.
+func (c *OnchainDepositClient) Create() *OnchainDepositCreate {
+	mutation := newOnchainDepositMutation(c.config, OpCreate)
+	return &OnchainDepositCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of OnchainDeposit entities.
+func (c *OnchainDepositClient) CreateBulk(builders ...*OnchainDepositCreate) *OnchainDepositCreateBulk {
+	return &OnchainDepositCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *OnchainDepositClient) MapCreateBulk(slice any, setFunc func(*OnchainDepositCreate, int)) *OnchainDepositCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &OnchainDepositCreateBulk{err: fmt.Errorf("calling to OnchainDepositClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*OnchainDepositCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &OnchainDepositCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for OnchainDeposit.
+func (c *OnchainDepositClient) Update() *OnchainDepositUpdate {
+	mutation := newOnchainDepositMutation(c.config, OpUpdate)
+	return &OnchainDepositUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *OnchainDepositClient) UpdateOne(_m *OnchainDeposit) *OnchainDepositUpdateOne {
+	mutation := newOnchainDepositMutation(c.config, OpUpdateOne, withOnchainDeposit(_m))
+	return &OnchainDepositUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *OnchainDepositClient) UpdateOneID(id int64) *OnchainDepositUpdateOne {
+	mutation := newOnchainDepositMutation(c.config, OpUpdateOne, withOnchainDepositID(id))
+	return &OnchainDepositUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for OnchainDeposit.
+func (c *OnchainDepositClient) Delete() *OnchainDepositDelete {
+	mutation := newOnchainDepositMutation(c.config, OpDelete)
+	return &OnchainDepositDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *OnchainDepositClient) DeleteOne(_m *OnchainDeposit) *OnchainDepositDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *OnchainDepositClient) DeleteOneID(id int64) *OnchainDepositDeleteOne {
+	builder := c.Delete().Where(onchaindeposit.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &OnchainDepositDeleteOne{builder}
+}
+
+// Query returns a query builder for OnchainDeposit.
+func (c *OnchainDepositClient) Query() *OnchainDepositQuery {
+	return &OnchainDepositQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeOnchainDeposit},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a OnchainDeposit entity by its id.
+func (c *OnchainDepositClient) Get(ctx context.Context, id int64) (*OnchainDeposit, error) {
+	return c.Query().Where(onchaindeposit.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *OnchainDepositClient) GetX(ctx context.Context, id int64) *OnchainDeposit {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *OnchainDepositClient) Hooks() []Hook {
+	return c.hooks.OnchainDeposit
+}
+
+// Interceptors returns the client interceptors.
+func (c *OnchainDepositClient) Interceptors() []Interceptor {
+	return c.inters.OnchainDeposit
+}
+
+func (c *OnchainDepositClient) mutate(ctx context.Context, m *OnchainDepositMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&OnchainDepositCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&OnchainDepositUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&OnchainDepositUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&OnchainDepositDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown OnchainDeposit mutation op: %q", m.Op())
+	}
+}
+
+// OnchainDepositScanStateClient is a client for the OnchainDepositScanState schema.
+type OnchainDepositScanStateClient struct {
+	config
+}
+
+// NewOnchainDepositScanStateClient returns a client for the OnchainDepositScanState from the given config.
+func NewOnchainDepositScanStateClient(c config) *OnchainDepositScanStateClient {
+	return &OnchainDepositScanStateClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `onchaindepositscanstate.Hooks(f(g(h())))`.
+func (c *OnchainDepositScanStateClient) Use(hooks ...Hook) {
+	c.hooks.OnchainDepositScanState = append(c.hooks.OnchainDepositScanState, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `onchaindepositscanstate.Intercept(f(g(h())))`.
+func (c *OnchainDepositScanStateClient) Intercept(interceptors ...Interceptor) {
+	c.inters.OnchainDepositScanState = append(c.inters.OnchainDepositScanState, interceptors...)
+}
+
+// Create returns a builder for creating a OnchainDepositScanState entity.
+func (c *OnchainDepositScanStateClient) Create() *OnchainDepositScanStateCreate {
+	mutation := newOnchainDepositScanStateMutation(c.config, OpCreate)
+	return &OnchainDepositScanStateCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of OnchainDepositScanState entities.
+func (c *OnchainDepositScanStateClient) CreateBulk(builders ...*OnchainDepositScanStateCreate) *OnchainDepositScanStateCreateBulk {
+	return &OnchainDepositScanStateCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *OnchainDepositScanStateClient) MapCreateBulk(slice any, setFunc func(*OnchainDepositScanStateCreate, int)) *OnchainDepositScanStateCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &OnchainDepositScanStateCreateBulk{err: fmt.Errorf("calling to OnchainDepositScanStateClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*OnchainDepositScanStateCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &OnchainDepositScanStateCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for OnchainDepositScanState.
+func (c *OnchainDepositScanStateClient) Update() *OnchainDepositScanStateUpdate {
+	mutation := newOnchainDepositScanStateMutation(c.config, OpUpdate)
+	return &OnchainDepositScanStateUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *OnchainDepositScanStateClient) UpdateOne(_m *OnchainDepositScanState) *OnchainDepositScanStateUpdateOne {
+	mutation := newOnchainDepositScanStateMutation(c.config, OpUpdateOne, withOnchainDepositScanState(_m))
+	return &OnchainDepositScanStateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *OnchainDepositScanStateClient) UpdateOneID(id int64) *OnchainDepositScanStateUpdateOne {
+	mutation := newOnchainDepositScanStateMutation(c.config, OpUpdateOne, withOnchainDepositScanStateID(id))
+	return &OnchainDepositScanStateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for OnchainDepositScanState.
+func (c *OnchainDepositScanStateClient) Delete() *OnchainDepositScanStateDelete {
+	mutation := newOnchainDepositScanStateMutation(c.config, OpDelete)
+	return &OnchainDepositScanStateDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *OnchainDepositScanStateClient) DeleteOne(_m *OnchainDepositScanState) *OnchainDepositScanStateDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *OnchainDepositScanStateClient) DeleteOneID(id int64) *OnchainDepositScanStateDeleteOne {
+	builder := c.Delete().Where(onchaindepositscanstate.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &OnchainDepositScanStateDeleteOne{builder}
+}
+
+// Query returns a query builder for OnchainDepositScanState.
+func (c *OnchainDepositScanStateClient) Query() *OnchainDepositScanStateQuery {
+	return &OnchainDepositScanStateQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeOnchainDepositScanState},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a OnchainDepositScanState entity by its id.
+func (c *OnchainDepositScanStateClient) Get(ctx context.Context, id int64) (*OnchainDepositScanState, error) {
+	return c.Query().Where(onchaindepositscanstate.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *OnchainDepositScanStateClient) GetX(ctx context.Context, id int64) *OnchainDepositScanState {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *OnchainDepositScanStateClient) Hooks() []Hook {
+	return c.hooks.OnchainDepositScanState
+}
+
+// Interceptors returns the client interceptors.
+func (c *OnchainDepositScanStateClient) Interceptors() []Interceptor {
+	return c.inters.OnchainDepositScanState
+}
+
+func (c *OnchainDepositScanStateClient) mutate(ctx context.Context, m *OnchainDepositScanStateMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&OnchainDepositScanStateCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&OnchainDepositScanStateUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&OnchainDepositScanStateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&OnchainDepositScanStateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown OnchainDepositScanState mutation op: %q", m.Op())
 	}
 }
 
@@ -3888,17 +4172,17 @@ func (c *UserSubscriptionClient) mutate(ctx context.Context, m *UserSubscription
 type (
 	hooks struct {
 		APIKey, Account, AccountGroup, Announcement, AnnouncementRead,
-		ErrorPassthroughRule, Group, IdempotencyRecord, PromoCode, PromoCodeUsage,
-		Proxy, RedeemCode, SecuritySecret, Setting, UsageCleanupTask, UsageLog, User,
-		UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
-		UserSubscription []ent.Hook
+		ErrorPassthroughRule, Group, IdempotencyRecord, OnchainDeposit,
+		OnchainDepositScanState, PromoCode, PromoCodeUsage, Proxy, RedeemCode,
+		SecuritySecret, Setting, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
+		UserAttributeDefinition, UserAttributeValue, UserSubscription []ent.Hook
 	}
 	inters struct {
 		APIKey, Account, AccountGroup, Announcement, AnnouncementRead,
-		ErrorPassthroughRule, Group, IdempotencyRecord, PromoCode, PromoCodeUsage,
-		Proxy, RedeemCode, SecuritySecret, Setting, UsageCleanupTask, UsageLog, User,
-		UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
-		UserSubscription []ent.Interceptor
+		ErrorPassthroughRule, Group, IdempotencyRecord, OnchainDeposit,
+		OnchainDepositScanState, PromoCode, PromoCodeUsage, Proxy, RedeemCode,
+		SecuritySecret, Setting, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
+		UserAttributeDefinition, UserAttributeValue, UserSubscription []ent.Interceptor
 	}
 )
 

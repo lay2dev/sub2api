@@ -30,6 +30,12 @@ type Group func(*sql.Selector)
 // IdempotencyRecord is the predicate function for idempotencyrecord builders.
 type IdempotencyRecord func(*sql.Selector)
 
+// OnchainDeposit is the predicate function for onchaindeposit builders.
+type OnchainDeposit func(*sql.Selector)
+
+// OnchainDepositScanState is the predicate function for onchaindepositscanstate builders.
+type OnchainDepositScanState func(*sql.Selector)
+
 // PromoCode is the predicate function for promocode builders.
 type PromoCode func(*sql.Selector)
 

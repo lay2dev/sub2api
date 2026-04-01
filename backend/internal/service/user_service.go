@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -76,6 +77,14 @@ type UserService struct {
 	billingCache         BillingCache
 }
 
+type userAddressLookupRepository interface {
+	FindUsersByBindingAddresses(ctx context.Context, addresses []string) ([]UserAddressMatch, error)
+}
+
+type userAddressListRepository interface {
+	ListBindingAddresses(ctx context.Context) ([]string, error)
+}
+
 // NewUserService 创建用户服务实例
 func NewUserService(userRepo UserRepository, authCacheInvalidator APIKeyAuthCacheInvalidator, billingCache BillingCache) *UserService {
 	return &UserService{
@@ -83,6 +92,35 @@ func NewUserService(userRepo UserRepository, authCacheInvalidator APIKeyAuthCach
 		authCacheInvalidator: authCacheInvalidator,
 		billingCache:         billingCache,
 	}
+}
+
+func (s *UserService) ResolveUserIDByAddress(ctx context.Context, address string) (int64, bool, error) {
+	lookupRepo, ok := s.userRepo.(userAddressLookupRepository)
+	if !ok {
+		return 0, false, fmt.Errorf("user repository does not support binding address lookup")
+	}
+
+	normalized := strings.ToLower(strings.TrimSpace(address))
+	if normalized == "" {
+		return 0, false, nil
+	}
+
+	matches, err := lookupRepo.FindUsersByBindingAddresses(ctx, []string{normalized})
+	if err != nil {
+		return 0, false, err
+	}
+	if len(matches) == 0 {
+		return 0, false, nil
+	}
+	return matches[0].UserID, true, nil
+}
+
+func (s *UserService) ListBindingAddresses(ctx context.Context) ([]string, error) {
+	listRepo, ok := s.userRepo.(userAddressListRepository)
+	if !ok {
+		return nil, fmt.Errorf("user repository does not support binding address listing")
+	}
+	return listRepo.ListBindingAddresses(ctx)
 }
 
 // GetFirstAdmin 获取首个管理员用户（用于 Admin API Key 认证）

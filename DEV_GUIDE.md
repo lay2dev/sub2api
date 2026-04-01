@@ -48,6 +48,19 @@ go test -tags=unit ./...
 go test -tags=integration ./...
 ```
 
+Optional forked-RPC coverage for the USDC deposit watcher:
+
+```bash
+cd backend
+BSC_FORK_RPC_URL=http://127.0.0.1:8545 \
+ARBITRUM_FORK_RPC_URL=http://127.0.0.1:8546 \
+BASE_FORK_RPC_URL=http://127.0.0.1:8547 \
+go test -tags=integration ./internal/service -run 'TestUSDCDepositWatcherForkRPC_'
+```
+
+You can set any subset of these env vars. Missing chain env vars are skipped and do not fail the test run.
+For a single chain check, set only one env var (for example `BASE_FORK_RPC_URL`) and run the same command.
+
 Frontend:
 
 ```bash

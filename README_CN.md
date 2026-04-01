@@ -396,12 +396,17 @@ jwt:
   secret: "change-this-to-a-secure-random-string"
   expire_hour: 24
 
+wallet:
+  binding_mnemonic: ""
+
 default:
   user_concurrency: 5
   user_balance: 0
   api_key_prefix: "sk-"
   rate_multiplier: 1.0
 ```
+
+如果配置了合法的 `wallet.binding_mnemonic`，系统会为每个新注册用户自动派生一个稳定的 EVM `binding_address`。服务端只保存最终派生出的地址，不会为用户保存助记词。
 
 ### Sora 功能状态（暂不可用）
 

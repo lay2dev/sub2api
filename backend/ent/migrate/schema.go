@@ -487,6 +487,71 @@ var (
 			},
 		},
 	}
+	// OnchainDepositsColumns holds the columns for the "onchain_deposits" table.
+	OnchainDepositsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "chain", Type: field.TypeString, Size: 32},
+		{Name: "token_symbol", Type: field.TypeString, Size: 16},
+		{Name: "token_contract", Type: field.TypeString, Size: 42},
+		{Name: "tx_hash", Type: field.TypeString, Size: 66},
+		{Name: "log_index", Type: field.TypeInt64},
+		{Name: "block_number", Type: field.TypeInt64},
+		{Name: "block_hash", Type: field.TypeString, Size: 66},
+		{Name: "from_address", Type: field.TypeString, Size: 42},
+		{Name: "to_address", Type: field.TypeString, Size: 42},
+		{Name: "amount_raw", Type: field.TypeString, Size: 80},
+		{Name: "amount_credit", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "status", Type: field.TypeString, Size: 32, Default: "detected"},
+		{Name: "credited_at", Type: field.TypeTime, Nullable: true},
+		{Name: "error_message", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+	}
+	// OnchainDepositsTable holds the schema information for the "onchain_deposits" table.
+	OnchainDepositsTable = &schema.Table{
+		Name:       "onchain_deposits",
+		Columns:    OnchainDepositsColumns,
+		PrimaryKey: []*schema.Column{OnchainDepositsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "onchaindeposit_chain_tx_hash_log_index",
+				Unique:  true,
+				Columns: []*schema.Column{OnchainDepositsColumns[4], OnchainDepositsColumns[7], OnchainDepositsColumns[8]},
+			},
+			{
+				Name:    "onchaindeposit_chain_status",
+				Unique:  false,
+				Columns: []*schema.Column{OnchainDepositsColumns[4], OnchainDepositsColumns[15]},
+			},
+			{
+				Name:    "onchaindeposit_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{OnchainDepositsColumns[3]},
+			},
+		},
+	}
+	// OnchainDepositScanStatesColumns holds the columns for the "onchain_deposit_scan_states" table.
+	OnchainDepositScanStatesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "chain", Type: field.TypeString, Size: 32},
+		{Name: "last_scanned_block", Type: field.TypeInt64, Default: 0},
+	}
+	// OnchainDepositScanStatesTable holds the schema information for the "onchain_deposit_scan_states" table.
+	OnchainDepositScanStatesTable = &schema.Table{
+		Name:       "onchain_deposit_scan_states",
+		Columns:    OnchainDepositScanStatesColumns,
+		PrimaryKey: []*schema.Column{OnchainDepositScanStatesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "onchaindepositscanstate_chain",
+				Unique:  true,
+				Columns: []*schema.Column{OnchainDepositScanStatesColumns[3]},
+			},
+		},
+	}
 	// PromoCodesColumns holds the columns for the "promo_codes" table.
 	PromoCodesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -855,6 +920,7 @@ var (
 		{Name: "balance", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
 		{Name: "concurrency", Type: field.TypeInt, Default: 5},
 		{Name: "status", Type: field.TypeString, Size: 20, Default: "active"},
+		{Name: "binding_address", Type: field.TypeString, Size: 42, Default: ""},
 		{Name: "username", Type: field.TypeString, Size: 100, Default: ""},
 		{Name: "notes", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "totp_secret_encrypted", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
@@ -1099,6 +1165,8 @@ var (
 		ErrorPassthroughRulesTable,
 		GroupsTable,
 		IdempotencyRecordsTable,
+		OnchainDepositsTable,
+		OnchainDepositScanStatesTable,
 		PromoCodesTable,
 		PromoCodeUsagesTable,
 		ProxiesTable,
@@ -1146,6 +1214,12 @@ func init() {
 	}
 	IdempotencyRecordsTable.Annotation = &entsql.Annotation{
 		Table: "idempotency_records",
+	}
+	OnchainDepositsTable.Annotation = &entsql.Annotation{
+		Table: "onchain_deposits",
+	}
+	OnchainDepositScanStatesTable.Annotation = &entsql.Annotation{
+		Table: "onchain_deposit_scan_states",
 	}
 	PromoCodesTable.Annotation = &entsql.Annotation{
 		Table: "promo_codes",

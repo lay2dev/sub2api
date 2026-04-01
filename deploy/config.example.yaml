@@ -826,6 +826,52 @@ totp:
   encryption_key: ""
 
 # =============================================================================
+# Wallet Binding Configuration
+# 绑定地址配置
+# =============================================================================
+wallet:
+  # Optional server-side mnemonic used to derive a deterministic EVM binding
+  # address for each newly registered user.
+  # 可选：服务端助记词，用于为每个新注册用户派生稳定的 EVM 绑定地址。
+  #
+  # The server stores only the derived address on the user record and does not
+  # store a per-user mnemonic.
+  # 服务端只会在用户记录上保存派生后的地址，不会保存用户助记词。
+  binding_mnemonic: ""
+  deposits:
+    # Enable onchain USDC deposit watcher
+    # 是否启用链上 USDC 充值监听
+    enabled: false
+    # Poll interval for background scanning
+    # 后台扫描轮询间隔（秒）
+    poll_interval_seconds: 30
+    # Max block span per eth_getLogs request
+    # 每次 eth_getLogs 扫描的最大区块跨度
+    scan_chunk_size: 500
+    # Per-request timeout for RPC calls
+    # RPC 请求超时（秒）
+    request_timeout_seconds: 15
+    chains:
+      bsc:
+        enabled: false
+        rpc_url: ""
+        usdc_contract_address: ""
+        confirmations: 15
+        start_block: 0
+      arbitrum:
+        enabled: false
+        rpc_url: ""
+        usdc_contract_address: ""
+        confirmations: 20
+        start_block: 0
+      base:
+        enabled: false
+        rpc_url: ""
+        usdc_contract_address: ""
+        confirmations: 20
+        start_block: 0
+
+# =============================================================================
 # LinuxDo Connect OAuth Login (SSO)
 # LinuxDo Connect OAuth 登录（用于 Sub2API 用户登录）
 # =============================================================================

@@ -140,6 +140,20 @@ func (_c *UserCreate) SetNillableStatus(v *string) *UserCreate {
 	return _c
 }
 
+// SetBindingAddress sets the "binding_address" field.
+func (_c *UserCreate) SetBindingAddress(v string) *UserCreate {
+	_c.mutation.SetBindingAddress(v)
+	return _c
+}
+
+// SetNillableBindingAddress sets the "binding_address" field if the given value is not nil.
+func (_c *UserCreate) SetNillableBindingAddress(v *string) *UserCreate {
+	if v != nil {
+		_c.SetBindingAddress(*v)
+	}
+	return _c
+}
+
 // SetUsername sets the "username" field.
 func (_c *UserCreate) SetUsername(v string) *UserCreate {
 	_c.mutation.SetUsername(v)
@@ -440,6 +454,10 @@ func (_c *UserCreate) defaults() error {
 		v := user.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.BindingAddress(); !ok {
+		v := user.DefaultBindingAddress
+		_c.mutation.SetBindingAddress(v)
+	}
 	if _, ok := _c.mutation.Username(); !ok {
 		v := user.DefaultUsername
 		_c.mutation.SetUsername(v)
@@ -507,6 +525,14 @@ func (_c *UserCreate) check() error {
 	if v, ok := _c.mutation.Status(); ok {
 		if err := user.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "User.status": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.BindingAddress(); !ok {
+		return &ValidationError{Name: "binding_address", err: errors.New(`ent: missing required field "User.binding_address"`)}
+	}
+	if v, ok := _c.mutation.BindingAddress(); ok {
+		if err := user.BindingAddressValidator(v); err != nil {
+			return &ValidationError{Name: "binding_address", err: fmt.Errorf(`ent: validator failed for field "User.binding_address": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Username(); !ok {
@@ -591,6 +617,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(user.FieldStatus, field.TypeString, value)
 		_node.Status = value
+	}
+	if value, ok := _c.mutation.BindingAddress(); ok {
+		_spec.SetField(user.FieldBindingAddress, field.TypeString, value)
+		_node.BindingAddress = value
 	}
 	if value, ok := _c.mutation.Username(); ok {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)
@@ -934,6 +964,18 @@ func (u *UserUpsert) UpdateStatus() *UserUpsert {
 	return u
 }
 
+// SetBindingAddress sets the "binding_address" field.
+func (u *UserUpsert) SetBindingAddress(v string) *UserUpsert {
+	u.Set(user.FieldBindingAddress, v)
+	return u
+}
+
+// UpdateBindingAddress sets the "binding_address" field to the value that was provided on create.
+func (u *UserUpsert) UpdateBindingAddress() *UserUpsert {
+	u.SetExcluded(user.FieldBindingAddress)
+	return u
+}
+
 // SetUsername sets the "username" field.
 func (u *UserUpsert) SetUsername(v string) *UserUpsert {
 	u.Set(user.FieldUsername, v)
@@ -1217,6 +1259,20 @@ func (u *UserUpsertOne) SetStatus(v string) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateStatus() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetBindingAddress sets the "binding_address" field.
+func (u *UserUpsertOne) SetBindingAddress(v string) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetBindingAddress(v)
+	})
+}
+
+// UpdateBindingAddress sets the "binding_address" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateBindingAddress() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateBindingAddress()
 	})
 }
 
@@ -1687,6 +1743,20 @@ func (u *UserUpsertBulk) SetStatus(v string) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateStatus() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetBindingAddress sets the "binding_address" field.
+func (u *UserUpsertBulk) SetBindingAddress(v string) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetBindingAddress(v)
+	})
+}
+
+// UpdateBindingAddress sets the "binding_address" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateBindingAddress() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateBindingAddress()
 	})
 }
 
