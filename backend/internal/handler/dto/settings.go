@@ -115,6 +115,8 @@ type PublicSettings struct {
 	PurchaseSubscriptionURL          string           `json:"purchase_subscription_url"`
 	CustomMenuItems                  []CustomMenuItem `json:"custom_menu_items"`
 	LinuxDoOAuthEnabled              bool             `json:"linuxdo_oauth_enabled"`
+	GoogleOAuthEnabled               bool             `json:"google_oauth_enabled"`
+	GoogleOAuthClientID              string           `json:"google_oauth_client_id"`
 	SoraClientEnabled                bool             `json:"sora_client_enabled"`
 	BackendModeEnabled               bool             `json:"backend_mode_enabled"`
 	Version                          string           `json:"version"`

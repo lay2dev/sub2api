@@ -325,6 +325,19 @@ export interface ResetPasswordResponse {
   message: string
 }
 
+export interface GoogleOAuthPendingResponse {
+  requires_invitation: true
+  pending_oauth_token: string
+}
+
+export type GoogleOAuthExchangeResponse = AuthResponse | GoogleOAuthPendingResponse
+
+export function isGoogleOAuthPendingResponse(
+  response: GoogleOAuthExchangeResponse
+): response is GoogleOAuthPendingResponse {
+  return 'requires_invitation' in response && response.requires_invitation === true
+}
+
 /**
  * Reset password with token
  * @param request - Email, token, and new password
@@ -357,10 +370,30 @@ export async function completeLinuxDoOAuthRegistration(
   return data
 }
 
+export async function exchangeGoogleOAuth(request: {
+  google_token: string
+  invitation_code?: string
+}): Promise<GoogleOAuthExchangeResponse> {
+  const { data } = await apiClient.post<GoogleOAuthExchangeResponse>('/auth/oauth/google', request)
+  return data
+}
+
+export async function completeGoogleOAuthRegistration(
+  pendingOAuthToken: string,
+  invitationCode: string
+): Promise<AuthResponse> {
+  const { data } = await apiClient.post<AuthResponse>('/auth/oauth/google/complete-registration', {
+    pending_oauth_token: pendingOAuthToken,
+    invitation_code: invitationCode
+  })
+  return data
+}
+
 export const authAPI = {
   login,
   login2FA,
   isTotp2FARequired,
+  isGoogleOAuthPendingResponse,
   register,
   getCurrentUser,
   logout,
@@ -380,7 +413,9 @@ export const authAPI = {
   resetPassword,
   refreshToken,
   revokeAllSessions,
-  completeLinuxDoOAuthRegistration
+  completeLinuxDoOAuthRegistration,
+  exchangeGoogleOAuth,
+  completeGoogleOAuthRegistration
 }
 
 export default authAPI

@@ -441,6 +441,16 @@ export default {
       completing: 'Completing registration…',
       completeRegistrationFailed: 'Registration failed. Please check your invitation code and try again.'
     },
+    google: {
+      orContinue: 'or continue with email',
+      loadFailed: 'Failed to load Google sign-in. Please refresh and try again.',
+      signInFailed: 'Google sign-in failed. Please try again later.',
+      missingCredential: 'Missing Google sign-in credential. Please try again.',
+      invitationRequired: 'This Google account is not yet registered. The site requires an invitation code — please enter one to complete registration.',
+      completeRegistration: 'Complete Registration',
+      completing: 'Completing registration…',
+      completeRegistrationFailed: 'Registration failed. Please check your invitation code and try again.'
+    },
     oauth: {
       code: 'Code',
       state: 'State',

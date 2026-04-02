@@ -129,7 +129,7 @@ security:
     # 默认 CSP 策略（如果静态资源托管在其他域名，请自行覆盖）
     # Note: __CSP_NONCE__ will be replaced with 'nonce-xxx' at request time for inline script security
     # 注意：__CSP_NONCE__ 会在请求时被替换为 'nonce-xxx'，用于内联脚本安全
-    policy: "default-src 'self'; script-src 'self' __CSP_NONCE__ https://challenges.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https:; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    policy: "default-src 'self'; script-src 'self' __CSP_NONCE__ https://challenges.cloudflare.com https://static.cloudflareinsights.com https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: https://accounts.google.com; frame-src https://challenges.cloudflare.com https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
   proxy_probe:
     # Allow skipping TLS verification for proxy probe (debug only)
     # 允许代理探测时跳过 TLS 证书验证（仅用于调试）
@@ -895,6 +895,15 @@ linuxdo_connect:
   userinfo_email_path: ""
   userinfo_id_path: ""
   userinfo_username_path: ""
+
+# =============================================================================
+# Google OAuth Login
+# Google OAuth 登录（用于 Sub2API 用户登录）
+# =============================================================================
+google_oauth:
+  enabled: false
+  # Google OAuth Web client ID，用于前端 Google Identity Services 按钮和后端 ID token audience 校验
+  client_id: ""
 
 # =============================================================================
 # Default Settings

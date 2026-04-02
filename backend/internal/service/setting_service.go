@@ -165,6 +165,11 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 	} else {
 		linuxDoEnabled = s.cfg != nil && s.cfg.LinuxDo.Enabled
 	}
+	googleOAuthEnabled := s.cfg != nil && s.cfg.GoogleOAuth.Enabled
+	googleOAuthClientID := ""
+	if s.cfg != nil {
+		googleOAuthClientID = strings.TrimSpace(s.cfg.GoogleOAuth.ClientID)
+	}
 
 	// Password reset requires email verification to be enabled
 	emailVerifyEnabled := settings[SettingKeyEmailVerifyEnabled] == "true"
@@ -196,6 +201,8 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SoraClientEnabled:                settings[SettingKeySoraClientEnabled] == "true",
 		CustomMenuItems:                  settings[SettingKeyCustomMenuItems],
 		LinuxDoOAuthEnabled:              linuxDoEnabled,
+		GoogleOAuthEnabled:               googleOAuthEnabled,
+		GoogleOAuthClientID:              googleOAuthClientID,
 		BackendModeEnabled:               settings[SettingKeyBackendModeEnabled] == "true",
 	}, nil
 }
@@ -248,6 +255,8 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		SoraClientEnabled                bool            `json:"sora_client_enabled"`
 		CustomMenuItems                  json.RawMessage `json:"custom_menu_items"`
 		LinuxDoOAuthEnabled              bool            `json:"linuxdo_oauth_enabled"`
+		GoogleOAuthEnabled               bool            `json:"google_oauth_enabled"`
+		GoogleOAuthClientID              string          `json:"google_oauth_client_id,omitempty"`
 		BackendModeEnabled               bool            `json:"backend_mode_enabled"`
 		Version                          string          `json:"version,omitempty"`
 	}{
@@ -273,6 +282,8 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		SoraClientEnabled:                settings.SoraClientEnabled,
 		CustomMenuItems:                  filterUserVisibleMenuItems(settings.CustomMenuItems),
 		LinuxDoOAuthEnabled:              settings.LinuxDoOAuthEnabled,
+		GoogleOAuthEnabled:               settings.GoogleOAuthEnabled,
+		GoogleOAuthClientID:              settings.GoogleOAuthClientID,
 		BackendModeEnabled:               settings.BackendModeEnabled,
 		Version:                          s.version,
 	}, nil

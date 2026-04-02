@@ -106,6 +106,8 @@ type PublicSettings struct {
 	CustomMenuItems             string // JSON array of custom menu items
 
 	LinuxDoOAuthEnabled bool
+	GoogleOAuthEnabled  bool
+	GoogleOAuthClientID string
 	BackendModeEnabled  bool
 	Version             string
 }

@@ -55,6 +55,7 @@ func TestAPIContracts(t *testing.T) {
 					"balance": 12.5,
 					"concurrency": 5,
 					"status": "active",
+					"binding_address": "",
 					"allowed_groups": null,
 					"created_at": "2025-01-02T03:04:05Z",
 					"updated_at": "2025-01-02T03:04:05Z",
