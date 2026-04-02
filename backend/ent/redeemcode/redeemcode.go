@@ -26,6 +26,10 @@ const (
 	FieldUsedBy = "used_by"
 	// FieldUsedAt holds the string denoting the used_at field in the database.
 	FieldUsedAt = "used_at"
+	// FieldMaxUses holds the string denoting the max_uses field in the database.
+	FieldMaxUses = "max_uses"
+	// FieldUsedCount holds the string denoting the used_count field in the database.
+	FieldUsedCount = "used_count"
 	// FieldNotes holds the string denoting the notes field in the database.
 	FieldNotes = "notes"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -65,6 +69,8 @@ var Columns = []string{
 	FieldStatus,
 	FieldUsedBy,
 	FieldUsedAt,
+	FieldMaxUses,
+	FieldUsedCount,
 	FieldNotes,
 	FieldCreatedAt,
 	FieldGroupID,
@@ -94,6 +100,10 @@ var (
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	StatusValidator func(string) error
+	// DefaultMaxUses holds the default value on creation for the "max_uses" field.
+	DefaultMaxUses int
+	// DefaultUsedCount holds the default value on creation for the "used_count" field.
+	DefaultUsedCount int
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultValidityDays holds the default value on creation for the "validity_days" field.
@@ -136,6 +146,16 @@ func ByUsedBy(opts ...sql.OrderTermOption) OrderOption {
 // ByUsedAt orders the results by the used_at field.
 func ByUsedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUsedAt, opts...).ToFunc()
+}
+
+// ByMaxUses orders the results by the max_uses field.
+func ByMaxUses(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMaxUses, opts...).ToFunc()
+}
+
+// ByUsedCount orders the results by the used_count field.
+func ByUsedCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUsedCount, opts...).ToFunc()
 }
 
 // ByNotes orders the results by the notes field.

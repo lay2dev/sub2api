@@ -8,6 +8,7 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/suite"
@@ -65,6 +66,27 @@ func (s *RedeemCodeRepoSuite) TestCreate() {
 	got, err := s.repo.GetByID(s.ctx, code.ID)
 	s.Require().NoError(err, "GetByID")
 	s.Require().Equal("TEST-CREATE", got.Code)
+}
+
+func (s *RedeemCodeRepoSuite) TestCreate_TrialCodePersistsUsageCounters() {
+	code := &service.RedeemCode{
+		Code:      "TRIAL-CREATE",
+		Type:      domain.RedeemTypeAPIKeyTrial,
+		Value:     0,
+		Status:    service.StatusUnused,
+		MaxUses:   3,
+		UsedCount: 1,
+	}
+
+	err := s.repo.Create(s.ctx, code)
+	s.Require().NoError(err, "Create")
+	s.Require().NotZero(code.ID, "expected ID to be set")
+
+	got, err := s.repo.GetByID(s.ctx, code.ID)
+	s.Require().NoError(err, "GetByID")
+	s.Require().Equal(domain.RedeemTypeAPIKeyTrial, got.Type)
+	s.Require().Equal(3, got.MaxUses)
+	s.Require().Equal(1, got.UsedCount)
 }
 
 func (s *RedeemCodeRepoSuite) TestCreateBatch() {
@@ -214,6 +236,47 @@ func (s *RedeemCodeRepoSuite) TestUpdate() {
 	got, err := s.repo.GetByID(s.ctx, code.ID)
 	s.Require().NoError(err)
 	s.Require().Equal(float64(50), got.Value)
+}
+
+func (s *RedeemCodeRepoSuite) TestCreateUsageAndGetUsageByRedeemCodeAndUser() {
+	user := s.createUser(uniqueTestValue(s.T(), "trial-user") + "@example.com")
+	createdAPIKey, err := s.client.APIKey.Create().
+		SetUserID(user.ID).
+		SetKey(uniqueTestValue(s.T(), "sk-trial")).
+		SetName("trial-issued-key").
+		SetStatus(service.StatusActive).
+		Save(s.ctx)
+	s.Require().NoError(err, "create api key")
+
+	code := &service.RedeemCode{
+		Code:      "TRIAL-USAGE",
+		Type:      domain.RedeemTypeAPIKeyTrial,
+		Value:     0,
+		Status:    service.StatusUnused,
+		MaxUses:   5,
+		UsedCount: 0,
+	}
+	s.Require().NoError(s.repo.Create(s.ctx, code), "create trial redeem code")
+
+	usedAt := time.Date(2026, 4, 1, 8, 30, 0, 0, time.UTC)
+	usage := &service.RedeemCodeUsage{
+		RedeemCodeID: code.ID,
+		UserID:       user.ID,
+		APIKeyID:     createdAPIKey.ID,
+		UsedAt:       usedAt,
+	}
+
+	err = s.repo.CreateUsage(s.ctx, usage)
+	s.Require().NoError(err, "CreateUsage")
+	s.Require().NotZero(usage.ID, "expected usage ID to be set")
+
+	got, err := s.repo.GetUsageByRedeemCodeAndUser(s.ctx, code.ID, user.ID)
+	s.Require().NoError(err, "GetUsageByRedeemCodeAndUser")
+	s.Require().NotNil(got)
+	s.Require().Equal(code.ID, got.RedeemCodeID)
+	s.Require().Equal(user.ID, got.UserID)
+	s.Require().Equal(createdAPIKey.ID, got.APIKeyID)
+	s.Require().True(got.UsedAt.Equal(usedAt), "used_at should round-trip")
 }
 
 // --- Use ---
