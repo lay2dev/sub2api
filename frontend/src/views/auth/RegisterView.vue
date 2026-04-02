@@ -11,8 +11,17 @@
         </p>
       </div>
 
-      <!-- LinuxDo Connect OAuth 登录 -->
-      <LinuxDoOAuthSection v-if="linuxdoOAuthEnabled" :disabled="isLoading" />
+      <!-- Google / LinuxDo OAuth 登录 -->
+      <GoogleOAuthSection
+        v-if="googleOAuthEnabled && googleOAuthClientId && !backendModeEnabled"
+        :client-id="googleOAuthClientId"
+        :disabled="isLoading"
+        :show-divider="!linuxdoOAuthEnabled"
+      />
+      <LinuxDoOAuthSection
+        v-if="linuxdoOAuthEnabled && !backendModeEnabled"
+        :disabled="isLoading"
+      />
 
       <!-- Registration Disabled Message -->
       <div
@@ -288,6 +297,7 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { AuthLayout } from '@/components/layout'
+import GoogleOAuthSection from '@/components/auth/GoogleOAuthSection.vue'
 import LinuxDoOAuthSection from '@/components/auth/LinuxDoOAuthSection.vue'
 import Icon from '@/components/icons/Icon.vue'
 import TurnstileWidget from '@/components/TurnstileWidget.vue'
@@ -324,6 +334,9 @@ const turnstileEnabled = ref<boolean>(false)
 const turnstileSiteKey = ref<string>('')
 const siteName = ref<string>('Sub2API')
 const linuxdoOAuthEnabled = ref<boolean>(false)
+const googleOAuthEnabled = ref<boolean>(false)
+const googleOAuthClientId = ref<string>('')
+const backendModeEnabled = ref<boolean>(false)
 const registrationEmailSuffixWhitelist = ref<string[]>([])
 
 // Turnstile
@@ -376,6 +389,9 @@ onMounted(async () => {
     turnstileSiteKey.value = settings.turnstile_site_key || ''
     siteName.value = settings.site_name || 'Sub2API'
     linuxdoOAuthEnabled.value = settings.linuxdo_oauth_enabled
+    googleOAuthEnabled.value = settings.google_oauth_enabled
+    googleOAuthClientId.value = settings.google_oauth_client_id || ''
+    backendModeEnabled.value = settings.backend_mode_enabled
     registrationEmailSuffixWhitelist.value = normalizeRegistrationEmailSuffixWhitelist(
       settings.registration_email_suffix_whitelist || []
     )

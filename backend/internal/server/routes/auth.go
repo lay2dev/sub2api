@@ -64,6 +64,15 @@ func RegisterAuthRoutes(
 		}), h.Auth.ResetPassword)
 		auth.GET("/oauth/linuxdo/start", h.Auth.LinuxDoOAuthStart)
 		auth.GET("/oauth/linuxdo/callback", h.Auth.LinuxDoOAuthCallback)
+		auth.POST("/oauth/google", rateLimiter.LimitWithOptions("oauth-google", 20, time.Minute, middleware.RateLimitOptions{
+			FailureMode: middleware.RateLimitFailClose,
+		}), h.Auth.GoogleOAuthExchange)
+		auth.POST("/oauth/google/complete-registration",
+			rateLimiter.LimitWithOptions("oauth-google-complete", 10, time.Minute, middleware.RateLimitOptions{
+				FailureMode: middleware.RateLimitFailClose,
+			}),
+			h.Auth.CompleteGoogleOAuthRegistration,
+		)
 		auth.POST("/oauth/linuxdo/complete-registration",
 			rateLimiter.LimitWithOptions("oauth-linuxdo-complete", 10, time.Minute, middleware.RateLimitOptions{
 				FailureMode: middleware.RateLimitFailClose,

@@ -191,7 +191,7 @@ export const useAuthStore = defineStore('auth', () => {
       }
 
       // Set auth state from the response
-      setAuthFromResponse(response)
+      applyAuthResponse(response)
 
       return response
     } catch (error) {
@@ -211,7 +211,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function login2FA(tempToken: string, totpCode: string): Promise<User> {
     try {
       const response = await authAPI.login2FA({ temp_token: tempToken, totp_code: totpCode })
-      setAuthFromResponse(response)
+      applyAuthResponse(response)
       return user.value!
     } catch (error) {
       clearAuth()
@@ -254,6 +254,11 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  function applyAuthResponse(response: AuthResponse): User {
+    setAuthFromResponse(response)
+    return user.value!
+  }
+
   /**
    * User registration
    * @param userData - Registration data (username, email, password)
@@ -265,7 +270,7 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await authAPI.register(userData)
 
       // Use the common helper to set auth state
-      setAuthFromResponse(response)
+      applyAuthResponse(response)
 
       return user.value!
     } catch (error) {
@@ -399,6 +404,7 @@ export const useAuthStore = defineStore('auth', () => {
     // Actions
     login,
     login2FA,
+    applyAuthResponse,
     register,
     setToken,
     logout,

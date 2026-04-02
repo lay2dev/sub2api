@@ -440,6 +440,16 @@ export default {
       completing: '正在完成注册...',
       completeRegistrationFailed: '注册失败，请检查邀请码后重试。'
     },
+    google: {
+      orContinue: '或使用邮箱密码继续',
+      loadFailed: 'Google 登录加载失败，请刷新后重试。',
+      signInFailed: 'Google 登录失败，请稍后重试。',
+      missingCredential: '未获取到 Google 登录凭证，请重试。',
+      invitationRequired: '该 Google 账号尚未注册，站点已开启邀请码注册，请输入邀请码以完成注册。',
+      completeRegistration: '完成注册',
+      completing: '正在完成注册...',
+      completeRegistrationFailed: '注册失败，请检查邀请码后重试。'
+    },
     oauth: {
       code: '授权码',
       state: '状态',
