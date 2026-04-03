@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -430,6 +432,8 @@ const (
 	proxyQualityResponseHeaderTimeout = 10 * time.Second
 	proxyQualityMaxBodyBytes          = int64(8 * 1024)
 	proxyQualityClientUserAgent       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+	trialCodeCharset                  = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	trialCodeLength                   = 6
 )
 
 // adminServiceImpl implements AdminService
@@ -451,6 +455,7 @@ type adminServiceImpl struct {
 	defaultSubAssigner   DefaultSubscriptionAssigner
 	userSubRepo          UserSubscriptionRepository
 	privacyClientFactory PrivacyClientFactory
+	cfg                  *config.Config
 }
 
 type userGroupRateBatchReader interface {
@@ -477,6 +482,11 @@ func NewAdminService(
 	userSubRepo UserSubscriptionRepository,
 	privacyClientFactory PrivacyClientFactory,
 ) AdminService {
+	var cfg *config.Config
+	if settingService != nil {
+		cfg = settingService.cfg
+	}
+
 	return &adminServiceImpl{
 		userRepo:             userRepo,
 		groupRepo:            groupRepo,
@@ -495,6 +505,7 @@ func NewAdminService(
 		defaultSubAssigner:   defaultSubAssigner,
 		userSubRepo:          userSubRepo,
 		privacyClientFactory: privacyClientFactory,
+		cfg:                  cfg,
 	}
 }
 
@@ -2055,9 +2066,17 @@ func (s *adminServiceImpl) GenerateRedeemCodes(ctx context.Context, input *Gener
 		}
 	}
 
+	trialMaxUses := 100
+	if s.cfg != nil && s.cfg.Default.APIKeyTrialMaxUses > 0 {
+		trialMaxUses = s.cfg.Default.APIKeyTrialMaxUses
+	}
+
 	codes := make([]RedeemCode, 0, input.Count)
 	for i := 0; i < input.Count; i++ {
 		codeValue, err := GenerateRedeemCode()
+		if input.Type == RedeemTypeAPIKeyTrial {
+			codeValue, err = generateTrialInvitationCode()
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -2070,7 +2089,7 @@ func (s *adminServiceImpl) GenerateRedeemCodes(ctx context.Context, input *Gener
 		if input.Type == RedeemTypeAPIKeyTrial {
 			code.Type = RedeemTypeAPIKeyTrial
 			code.Value = 0
-			code.MaxUses = 100
+			code.MaxUses = trialMaxUses
 			code.UsedCount = 0
 		}
 		// 订阅类型专用字段
@@ -2087,6 +2106,19 @@ func (s *adminServiceImpl) GenerateRedeemCodes(ctx context.Context, input *Gener
 		codes = append(codes, code)
 	}
 	return codes, nil
+}
+
+func generateTrialInvitationCode() (string, error) {
+	randomBytes := make([]byte, trialCodeLength)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", fmt.Errorf("generate trial invitation code random bytes: %w", err)
+	}
+
+	code := make([]byte, trialCodeLength)
+	for i, b := range randomBytes {
+		code[i] = trialCodeCharset[int(b)%len(trialCodeCharset)]
+	}
+	return string(code), nil
 }
 
 func (s *adminServiceImpl) DeleteRedeemCode(ctx context.Context, id int64) error {

@@ -67,7 +67,7 @@ type Config struct {
 	JWT                     JWTConfig                     `mapstructure:"jwt"`
 	Totp                    TotpConfig                    `mapstructure:"totp"`
 	LinuxDo                 LinuxDoConnectConfig          `mapstructure:"linuxdo_connect"`
-	GoogleOAuth            GoogleOAuthConfig             `mapstructure:"google_oauth"`
+	GoogleOAuth             GoogleOAuthConfig             `mapstructure:"google_oauth"`
 	Default                 DefaultConfig                 `mapstructure:"default"`
 	RateLimit               RateLimitConfig               `mapstructure:"rate_limit"`
 	Pricing                 PricingConfig                 `mapstructure:"pricing"`
@@ -895,12 +895,15 @@ type TurnstileConfig struct {
 }
 
 type DefaultConfig struct {
-	AdminEmail      string  `mapstructure:"admin_email"`
-	AdminPassword   string  `mapstructure:"admin_password"`
-	UserConcurrency int     `mapstructure:"user_concurrency"`
-	UserBalance     float64 `mapstructure:"user_balance"`
-	APIKeyPrefix    string  `mapstructure:"api_key_prefix"`
-	RateMultiplier  float64 `mapstructure:"rate_multiplier"`
+	AdminEmail               string  `mapstructure:"admin_email"`
+	AdminPassword            string  `mapstructure:"admin_password"`
+	UserConcurrency          int     `mapstructure:"user_concurrency"`
+	UserBalance              float64 `mapstructure:"user_balance"`
+	APIKeyPrefix             string  `mapstructure:"api_key_prefix"`
+	RateMultiplier           float64 `mapstructure:"rate_multiplier"`
+	APIKeyTrialQuotaUSD      float64 `mapstructure:"api_key_trial_quota_usd"`
+	APIKeyTrialMaxUses       int     `mapstructure:"api_key_trial_max_uses"`
+	APIKeyTrialExpiresInDays int     `mapstructure:"api_key_trial_expires_in_days"`
 }
 
 type WalletConfig struct {
@@ -1325,6 +1328,9 @@ func setDefaults() {
 	viper.SetDefault("default.user_balance", 0)
 	viper.SetDefault("default.api_key_prefix", "sk-")
 	viper.SetDefault("default.rate_multiplier", 1.0)
+	viper.SetDefault("default.api_key_trial_quota_usd", 20.0)
+	viper.SetDefault("default.api_key_trial_max_uses", 100)
+	viper.SetDefault("default.api_key_trial_expires_in_days", 7)
 	viper.SetDefault("wallet.binding_mnemonic", "")
 	viper.SetDefault("wallet.deposits.enabled", false)
 	viper.SetDefault("wallet.deposits.poll_interval_seconds", 30)
