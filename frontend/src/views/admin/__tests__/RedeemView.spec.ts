@@ -47,6 +47,9 @@ const messages: Record<string, string> = {
   'admin.redeem.apiKeyTrialHint':
     'Generates 6-character code with backend-configured policy.',
   'admin.redeem.apiKeyTrialValueLabel': 'Trial API Key',
+  'admin.redeem.apiKeyTrialUsageSummary': 'Used 3/100 · 97 remaining',
+  'admin.redeem.status.partially_used': 'Partially Used',
+  'common.delete': 'Delete',
 }
 
 vi.mock('vue-i18n', async () => {
@@ -98,12 +101,30 @@ const DataTableStub = defineComponent({
     firstValue() {
       return (this.firstRow as any).value ?? 0
     },
+    firstStatus() {
+      return (this.firstRow as any).status ?? ''
+    },
+    firstUsedBy() {
+      return (this.firstRow as any).used_by ?? null
+    },
+    firstUsedAt() {
+      return (this.firstRow as any).used_at ?? null
+    },
   },
   template: `
     <div>
       <slot
         name="cell-value"
         :value="firstValue"
+        :row="firstRow"
+      />
+      <slot
+        name="cell-status"
+        :value="firstStatus"
+        :row="firstRow"
+      />
+      <slot
+        name="cell-actions"
         :row="firstRow"
       />
     </div>
@@ -125,6 +146,9 @@ describe('admin RedeemView', () => {
           status: 'unused',
           used_by: null,
           used_at: null,
+          max_uses: 100,
+          used_count: 3,
+          remaining_uses: 97,
           created_at: '2026-04-03T00:00:00Z',
         },
       ],
@@ -136,7 +160,7 @@ describe('admin RedeemView', () => {
     getAll.mockResolvedValue([])
   })
 
-  it('shows api_key_trial in type selectors, hides amount input, and renders readable value label', async () => {
+  it('shows api_key_trial in type selectors, hides amount input, and renders usage-aware display', async () => {
     const wrapper = mount(RedeemView, {
       global: {
         stubs: {
@@ -162,7 +186,10 @@ describe('admin RedeemView', () => {
 
     expect(wrapper.text()).toContain('Trial API Key')
     expect(wrapper.text()).toContain('Generates 6-character code with backend-configured policy.')
+    expect(wrapper.text()).toContain('Used 3/100 · 97 remaining')
+    expect(wrapper.text()).toContain('Partially Used')
     expect(wrapper.find('input[type="number"][step="0.01"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('admin.redeem.selectGroup')
+    expect(wrapper.text()).not.toContain('Delete')
   })
 })

@@ -90,9 +90,18 @@
           </template>
 
           <template #cell-value="{ value, row }">
-            <span class="text-sm font-medium text-gray-900 dark:text-white">
+            <div class="text-sm text-gray-900 dark:text-white">
               <template v-if="row.type === 'api_key_trial'">
-                {{ t('admin.redeem.apiKeyTrialValueLabel') }}
+                <span class="font-medium">{{ t('admin.redeem.apiKeyTrialValueLabel') }}</span>
+                <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
+                  {{
+                    t('admin.redeem.apiKeyTrialUsageSummary', {
+                      used: row.used_count ?? 0,
+                      max: row.max_uses ?? 0,
+                      remaining: row.remaining_uses ?? 0
+                    })
+                  }}
+                </p>
               </template>
               <template v-else-if="row.type === 'balance'">${{ value.toFixed(2) }}</template>
               <template v-else-if="row.type === 'subscription'">
@@ -101,22 +110,28 @@
                   >({{ row.group.name }})</span
                 >
               </template>
-              <template v-else>{{ value }}</template>
-            </span>
+              <template v-else><span class="font-medium">{{ value }}</span></template>
+            </div>
           </template>
 
-          <template #cell-status="{ value }">
+          <template #cell-status="{ value, row }">
             <span
               :class="[
                 'badge',
-                value === 'unused'
+                row.type === 'api_key_trial' && (row.used_count ?? 0) > 0 && (row.remaining_uses ?? 0) > 0
+                  ? 'badge-warning'
+                  : value === 'unused'
                   ? 'badge-success'
                   : value === 'used'
                     ? 'badge-gray'
                     : 'badge-danger'
               ]"
             >
-              {{ t('admin.redeem.status.' + value) }}
+              {{
+                row.type === 'api_key_trial' && (row.used_count ?? 0) > 0 && (row.remaining_uses ?? 0) > 0
+                  ? t('admin.redeem.status.partially_used')
+                  : t('admin.redeem.status.' + value)
+              }}
             </span>
           </template>
 
@@ -135,7 +150,10 @@
           <template #cell-actions="{ row }">
             <div class="flex items-center space-x-2">
               <button
-                v-if="row.status === 'unused'"
+                v-if="
+                  row.status === 'unused' &&
+                  !(row.type === 'api_key_trial' && (row.used_count ?? 0) > 0)
+                "
                 @click="handleDelete(row)"
                 class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
               >

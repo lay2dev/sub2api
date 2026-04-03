@@ -3030,6 +3030,7 @@ export default {
       apiKeyTrialHint:
         'Generates 6-character trial invitation codes. Trial quota, max uses, and expiry are controlled by backend config.',
       apiKeyTrialValueLabel: 'Trial API Key',
+      apiKeyTrialUsageSummary: 'Used {used}/{max} · {remaining} remaining',
       unused: 'Unused',
       used: 'Used',
       columns: {
@@ -3078,6 +3079,7 @@ export default {
         subscription: 'Subscription',
         invitation: 'Invitation',
         api_key_trial: 'Trial API Key',
+        partially_used: 'Partially Used',
         // Admin adjustment types (created when admin modifies user balance/concurrency)
         admin_balance: 'Balance (Admin)',
         admin_concurrency: 'Concurrency (Admin)'
