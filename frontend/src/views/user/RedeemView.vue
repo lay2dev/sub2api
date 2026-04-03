@@ -98,32 +98,71 @@
                 <div class="mt-2 text-sm text-emerald-700 dark:text-emerald-400">
                   <p>{{ redeemResult.message }}</p>
                   <div class="mt-3 space-y-1">
-                    <p v-if="redeemResult.type === 'balance'" class="font-medium">
-                      {{ t('redeem.added') }}: ${{ redeemResult.value.toFixed(2) }}
-                    </p>
-                    <p v-else-if="redeemResult.type === 'concurrency'" class="font-medium">
-                      {{ t('redeem.added') }}: {{ redeemResult.value }}
-                      {{ t('redeem.concurrentRequests') }}
-                    </p>
-                    <p v-else-if="redeemResult.type === 'subscription'" class="font-medium">
-                      {{ t('redeem.subscriptionAssigned') }}
-                      <span v-if="redeemResult.group_name"> - {{ redeemResult.group_name }}</span>
-                      <span v-if="redeemResult.validity_days">
-                        ({{
-                          t('redeem.subscriptionDays', { days: redeemResult.validity_days })
-                        }})</span
+                    <template v-if="isTrialRedeemResult">
+                      <p class="font-medium">{{ t('redeem.trialApiKeyTitle') }}</p>
+                      <p class="text-xs">{{ t('redeem.trialApiKeyHint') }}</p>
+                      <div
+                        class="mt-2 rounded-lg bg-emerald-100/70 p-3 dark:bg-emerald-900/40"
                       >
-                    </p>
-                    <p v-if="redeemResult.new_balance !== undefined">
-                      {{ t('redeem.newBalance') }}:
-                      <span class="font-semibold">${{ redeemResult.new_balance.toFixed(2) }}</span>
-                    </p>
-                    <p v-if="redeemResult.new_concurrency !== undefined">
-                      {{ t('redeem.newConcurrency') }}:
-                      <span class="font-semibold"
-                        >{{ redeemResult.new_concurrency }} {{ t('redeem.requests') }}</span
-                      >
-                    </p>
+                        <div class="flex items-start justify-between gap-3">
+                          <div class="min-w-0 flex-1">
+                            <p class="text-xs font-semibold uppercase tracking-wide">
+                              {{ t('redeem.trialApiKeyLabel') }}
+                            </p>
+                            <p class="mt-1 break-all font-mono text-xs sm:text-sm">
+                              {{ redeemResult.issued_api_key?.key }}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            class="btn btn-secondary btn-sm flex-shrink-0"
+                            data-testid="redeem-trial-copy"
+                            @click="copyIssuedApiKey"
+                          >
+                            <Icon name="copy" size="sm" class="mr-1" />
+                            {{ t('redeem.copyTrialApiKey') }}
+                          </button>
+                        </div>
+                      </div>
+                      <p v-if="trialQuotaText">
+                        {{ t('redeem.trialQuotaLabel') }}:
+                        <span class="font-semibold">{{ trialQuotaText }}</span>
+                      </p>
+                      <p v-if="redeemResult.issued_api_key?.expires_at">
+                        {{ t('redeem.trialExpiresAtLabel') }}:
+                        <span class="font-semibold">{{
+                          formatDateTime(redeemResult.issued_api_key.expires_at)
+                        }}</span>
+                      </p>
+                    </template>
+                    <template v-else>
+                      <p v-if="redeemResult.type === 'balance'" class="font-medium">
+                        {{ t('redeem.added') }}: ${{ redeemResult.value.toFixed(2) }}
+                      </p>
+                      <p v-else-if="redeemResult.type === 'concurrency'" class="font-medium">
+                        {{ t('redeem.added') }}: {{ redeemResult.value }}
+                        {{ t('redeem.concurrentRequests') }}
+                      </p>
+                      <p v-else-if="redeemResult.type === 'subscription'" class="font-medium">
+                        {{ t('redeem.subscriptionAssigned') }}
+                        <span v-if="redeemResult.group_name"> - {{ redeemResult.group_name }}</span>
+                        <span v-if="redeemResult.validity_days">
+                          ({{
+                            t('redeem.subscriptionDays', { days: redeemResult.validity_days })
+                          }})</span
+                        >
+                      </p>
+                      <p v-if="redeemResult.new_balance !== undefined">
+                        {{ t('redeem.newBalance') }}:
+                        <span class="font-semibold">${{ redeemResult.new_balance.toFixed(2) }}</span>
+                      </p>
+                      <p v-if="redeemResult.new_concurrency !== undefined">
+                        {{ t('redeem.newConcurrency') }}:
+                        <span class="font-semibold"
+                          >{{ redeemResult.new_concurrency }} {{ t('redeem.requests') }}</span
+                        >
+                      </p>
+                    </template>
                   </div>
                 </div>
               </div>
@@ -348,6 +387,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useSubscriptionStore } from '@/stores/subscriptions'
 import { redeemAPI, authAPI, type RedeemHistoryItem } from '@/api'
+import { useClipboard } from '@/composables/useClipboard'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { formatDateTime } from '@/utils/format'
@@ -356,6 +396,7 @@ const { t } = useI18n()
 const authStore = useAuthStore()
 const appStore = useAppStore()
 const subscriptionStore = useSubscriptionStore()
+const { copyToClipboard } = useClipboard()
 
 const user = computed(() => authStore.user)
 
@@ -369,6 +410,11 @@ const redeemResult = ref<{
   new_concurrency?: number
   group_name?: string
   validity_days?: number
+  issued_api_key?: {
+    key: string
+    quota?: number
+    expires_at?: string | null
+  }
 } | null>(null)
 const errorMessage = ref('')
 
@@ -376,6 +422,23 @@ const errorMessage = ref('')
 const history = ref<RedeemHistoryItem[]>([])
 const loadingHistory = ref(false)
 const contactInfo = ref('')
+
+const isTrialRedeemResult = computed(() => {
+  return (
+    redeemResult.value?.type === 'api_key_trial' &&
+    !!redeemResult.value?.issued_api_key?.key
+  )
+})
+
+const trialQuotaText = computed(() => {
+  const quota = redeemResult.value?.issued_api_key?.quota
+  if (quota === undefined || quota === null) {
+    return ''
+  }
+
+  const formatted = Number.isInteger(quota) ? quota.toFixed(0) : quota.toFixed(2)
+  return `${formatted} USD`
+})
 
 // Helper functions for history display
 const isBalanceType = (type: string) => {
@@ -429,6 +492,15 @@ const fetchHistory = async () => {
   } finally {
     loadingHistory.value = false
   }
+}
+
+const copyIssuedApiKey = async () => {
+  const apiKey = redeemResult.value?.issued_api_key?.key
+  if (!apiKey) {
+    return
+  }
+
+  await copyToClipboard(apiKey, t('redeem.trialApiKeyCopied'))
 }
 
 const handleRedeem = async () => {

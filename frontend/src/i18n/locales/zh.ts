@@ -818,7 +818,14 @@ export default {
     codeRedeemSuccess: '兑换成功！',
     failedToRedeem: '兑换失败，请检查兑换码后重试。',
     subscriptionRefreshFailed: '兑换成功，但订阅状态刷新失败。',
-    pleaseEnterCode: '请输入兑换码'
+    pleaseEnterCode: '请输入兑换码',
+    trialApiKeyTitle: '您的试用 API 密钥',
+    trialApiKeyHint: '该密钥仅展示一次，请立即复制并妥善保存。',
+    trialApiKeyLabel: 'API 密钥',
+    trialQuotaLabel: '额度',
+    trialExpiresAtLabel: '过期时间',
+    copyTrialApiKey: '复制',
+    trialApiKeyCopied: 'API 密钥已复制'
   },
 
   // Profile

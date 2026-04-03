@@ -813,7 +813,14 @@ export default {
     codeRedeemSuccess: 'Code redeemed successfully!',
     failedToRedeem: 'Failed to redeem code. Please check the code and try again.',
     subscriptionRefreshFailed: 'Redeemed successfully, but failed to refresh subscription status.',
-    pleaseEnterCode: 'Please enter a redeem code'
+    pleaseEnterCode: 'Please enter a redeem code',
+    trialApiKeyTitle: 'Your Trial API Key',
+    trialApiKeyHint: 'This key is shown only once. Copy and store it now.',
+    trialApiKeyLabel: 'API Key',
+    trialQuotaLabel: 'Quota',
+    trialExpiresAtLabel: 'Expires At',
+    copyTrialApiKey: 'Copy',
+    trialApiKeyCopied: 'API key copied'
   },
 
   // Profile
