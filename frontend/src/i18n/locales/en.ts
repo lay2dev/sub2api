@@ -3025,7 +3025,11 @@ export default {
       concurrency: 'Concurrency',
       subscription: 'Subscription',
       invitation: 'Invitation',
+      apiKeyTrial: 'Trial API Key',
       invitationHint: 'Invitation codes are used to restrict user registration. They are automatically marked as used after use.',
+      apiKeyTrialHint:
+        'Generates 6-character trial invitation codes. Trial quota, max uses, and expiry are controlled by backend config.',
+      apiKeyTrialValueLabel: 'Trial API Key',
       unused: 'Unused',
       used: 'Used',
       columns: {
@@ -3073,6 +3077,7 @@ export default {
         concurrency: 'Concurrency',
         subscription: 'Subscription',
         invitation: 'Invitation',
+        api_key_trial: 'Trial API Key',
         // Admin adjustment types (created when admin modifies user balance/concurrency)
         admin_balance: 'Balance (Admin)',
         admin_concurrency: 'Concurrency (Admin)'

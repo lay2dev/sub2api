@@ -63,14 +63,15 @@ export async function getById(id: number): Promise<RedeemCode> {
 export async function generate(
   count: number,
   type: RedeemCodeType,
-  value: number,
+  value: number = 0,
   groupId?: number | null,
   validityDays?: number
 ): Promise<RedeemCode[]> {
+  const normalizedValue = type === 'invitation' || type === 'api_key_trial' ? 0 : value
   const payload: GenerateRedeemCodesRequest = {
     count,
     type,
-    value
+    value: normalizedValue
   }
 
   // 订阅类型专用字段

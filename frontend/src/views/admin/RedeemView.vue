@@ -91,7 +91,10 @@
 
           <template #cell-value="{ value, row }">
             <span class="text-sm font-medium text-gray-900 dark:text-white">
-              <template v-if="row.type === 'balance'">${{ value.toFixed(2) }}</template>
+              <template v-if="row.type === 'api_key_trial'">
+                {{ t('admin.redeem.apiKeyTrialValueLabel') }}
+              </template>
+              <template v-else-if="row.type === 'balance'">${{ value.toFixed(2) }}</template>
               <template v-else-if="row.type === 'subscription'">
                 {{ row.validity_days || 30 }} {{ t('admin.redeem.days') }}
                 <span v-if="row.group" class="ml-1 text-xs text-gray-500 dark:text-gray-400"
@@ -211,7 +214,13 @@
               <Select v-model="generateForm.type" :options="typeOptions" />
             </div>
             <!-- 余额/并发类型：显示数值输入 -->
-            <div v-if="generateForm.type !== 'subscription' && generateForm.type !== 'invitation'">
+            <div
+              v-if="
+                generateForm.type !== 'subscription' &&
+                generateForm.type !== 'invitation' &&
+                generateForm.type !== 'api_key_trial'
+              "
+            >
               <label class="input-label">
                 {{
                   generateForm.type === 'balance'
@@ -232,6 +241,15 @@
             <div v-if="generateForm.type === 'invitation'" class="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
               <p class="text-sm text-blue-700 dark:text-blue-300">
                 {{ t('admin.redeem.invitationHint') }}
+              </p>
+            </div>
+            <!-- API Key 试用类型：显示提示信息 -->
+            <div
+              v-if="generateForm.type === 'api_key_trial'"
+              class="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20"
+            >
+              <p class="text-sm text-blue-700 dark:text-blue-300">
+                {{ t('admin.redeem.apiKeyTrialHint') }}
               </p>
             </div>
             <!-- 订阅类型：显示分组选择和有效天数 -->
@@ -505,7 +523,8 @@ const typeOptions = computed(() => [
   { value: 'balance', label: t('admin.redeem.balance') },
   { value: 'concurrency', label: t('admin.redeem.concurrency') },
   { value: 'subscription', label: t('admin.redeem.subscription') },
-  { value: 'invitation', label: t('admin.redeem.invitation') }
+  { value: 'invitation', label: t('admin.redeem.invitation') },
+  { value: 'api_key_trial', label: t('admin.redeem.apiKeyTrial') }
 ])
 
 const filterTypeOptions = computed(() => [
@@ -513,7 +532,8 @@ const filterTypeOptions = computed(() => [
   { value: 'balance', label: t('admin.redeem.balance') },
   { value: 'concurrency', label: t('admin.redeem.concurrency') },
   { value: 'subscription', label: t('admin.redeem.subscription') },
-  { value: 'invitation', label: t('admin.redeem.invitation') }
+  { value: 'invitation', label: t('admin.redeem.invitation') },
+  { value: 'api_key_trial', label: t('admin.redeem.apiKeyTrial') }
 ])
 
 const filterStatusOptions = computed(() => [
@@ -553,11 +573,11 @@ const generateForm = reactive({
   validity_days: 30
 })
 
-// 监听类型变化，邀请码类型时自动设置 value 为 0
+// 监听类型变化，邀请码/试用类型时自动设置 value 为 0
 watch(
   () => generateForm.type,
   (newType) => {
-    if (newType === 'invitation') {
+    if (newType === 'invitation' || newType === 'api_key_trial') {
       generateForm.value = 0
     } else if (generateForm.value === 0) {
       generateForm.value = 10

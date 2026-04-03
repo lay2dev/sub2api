@@ -971,7 +971,12 @@ export interface AdminDataImportResult {
 
 // ==================== Usage & Redeem Types ====================
 
-export type RedeemCodeType = 'balance' | 'concurrency' | 'subscription' | 'invitation'
+export type RedeemCodeType =
+  | 'balance'
+  | 'concurrency'
+  | 'subscription'
+  | 'invitation'
+  | 'api_key_trial'
 export type UsageRequestType = 'unknown' | 'sync' | 'stream' | 'ws_v2'
 
 export interface UsageLog {
@@ -1082,6 +1087,9 @@ export interface RedeemCode {
   status: 'active' | 'used' | 'expired' | 'unused'
   used_by: number | null
   used_at: string | null
+  max_uses?: number
+  used_count?: number
+  remaining_uses?: number
   created_at: string
   updated_at?: string
   group_id?: number | null // 订阅类型专用

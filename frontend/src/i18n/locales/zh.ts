@@ -3160,6 +3160,7 @@ export default {
         concurrency: '并发数',
         subscription: '订阅',
         invitation: '邀请码',
+        api_key_trial: '试用 API Key',
         // 管理员在用户管理页面调整余额/并发时产生的记录
         admin_balance: '余额（管理员）',
         admin_concurrency: '并发数（管理员）'
@@ -3169,7 +3170,10 @@ export default {
       concurrency: '并发数',
       subscription: '订阅',
       invitation: '邀请码',
+      apiKeyTrial: '试用 API Key',
       invitationHint: '邀请码用于限制用户注册，使用后自动标记为已使用。',
+      apiKeyTrialHint: '生成 6 位试用邀请码。试用额度、使用次数和有效期由后端配置控制。',
+      apiKeyTrialValueLabel: '试用 API Key',
       allTypes: '全部类型',
       allStatus: '全部状态',
       unused: '未使用',
