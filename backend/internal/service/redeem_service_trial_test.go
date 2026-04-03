@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
 )
@@ -192,6 +193,35 @@ func TestRedeemAPIKeyTrialTx_StopsWhenIssuerFails(t *testing.T) {
 	require.ErrorContains(t, err, "issuer down")
 	require.Len(t, repo.createdUsages, 0)
 	require.Len(t, repo.updatedCodes, 0)
+}
+
+func TestRedeemAPIKeyTrialTx_UsesConfiguredQuotaAndExpiry(t *testing.T) {
+	repo := &redeemTrialRepoStub{}
+	issuer := &redeemTrialAPIKeyIssuerStub{
+		key: &APIKey{ID: 77, Key: "sk-configured", Quota: 35, Status: StatusActive},
+	}
+	svc := &RedeemService{
+		redeemRepo:   repo,
+		apiKeyIssuer: issuer,
+		cfg: &config.Config{
+			Default: config.DefaultConfig{
+				APIKeyTrialQuotaUSD:      35,
+				APIKeyTrialExpiresInDays: 9,
+			},
+		},
+	}
+
+	_, err := svc.redeemAPIKeyTrialTx(context.Background(), 1002, &RedeemCode{
+		ID:        8,
+		Type:      RedeemTypeAPIKeyTrial,
+		Status:    StatusUnused,
+		MaxUses:   100,
+		UsedCount: 0,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 35.0, issuer.lastReq.Quota)
+	require.NotNil(t, issuer.lastReq.ExpiresInDays)
+	require.Equal(t, 9, *issuer.lastReq.ExpiresInDays)
 }
 
 func TestRedeemService_GetUserHistory_MergesTrialUsages(t *testing.T) {

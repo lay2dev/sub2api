@@ -11,6 +11,7 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 )
@@ -89,6 +90,7 @@ type RedeemService struct {
 	userRepo             UserRepository
 	subscriptionService  *SubscriptionService
 	apiKeyIssuer         APIKeyIssuer
+	cfg                  *config.Config
 	cache                RedeemCache
 	billingCacheService  *BillingCacheService
 	entClient            *dbent.Client
@@ -101,6 +103,7 @@ func NewRedeemService(
 	userRepo UserRepository,
 	subscriptionService *SubscriptionService,
 	apiKeyIssuer APIKeyIssuer,
+	cfg *config.Config,
 	cache RedeemCache,
 	billingCacheService *BillingCacheService,
 	entClient *dbent.Client,
@@ -111,6 +114,7 @@ func NewRedeemService(
 		userRepo:             userRepo,
 		subscriptionService:  subscriptionService,
 		apiKeyIssuer:         apiKeyIssuer,
+		cfg:                  cfg,
 		cache:                cache,
 		billingCacheService:  billingCacheService,
 		entClient:            entClient,
@@ -400,10 +404,10 @@ func (s *RedeemService) redeemAPIKeyTrialTx(ctx context.Context, userID int64, r
 		return nil, ErrRedeemCodeAlreadyRedeemed
 	}
 
-	expiresInDays := trialRedeemExpiryDays
+	expiresInDays := s.trialRedeemExpiresInDays()
 	issuedAPIKey, err := s.apiKeyIssuer.Create(ctx, userID, CreateAPIKeyRequest{
 		Name:          fmt.Sprintf("Trial Key %s", time.Now().Format("2006-01-02")),
-		Quota:         trialRedeemQuotaUSD,
+		Quota:         s.trialRedeemQuotaUSD(),
 		ExpiresInDays: &expiresInDays,
 	})
 	if err != nil {
@@ -430,6 +434,20 @@ func (s *RedeemService) redeemAPIKeyTrialTx(ctx context.Context, userID int64, r
 
 	redeemCode.IssuedAPIKey = issuedAPIKey
 	return issuedAPIKey, nil
+}
+
+func (s *RedeemService) trialRedeemQuotaUSD() float64 {
+	if s != nil && s.cfg != nil && s.cfg.Default.APIKeyTrialQuotaUSD > 0 {
+		return s.cfg.Default.APIKeyTrialQuotaUSD
+	}
+	return trialRedeemQuotaUSD
+}
+
+func (s *RedeemService) trialRedeemExpiresInDays() int {
+	if s != nil && s.cfg != nil && s.cfg.Default.APIKeyTrialExpiresInDays > 0 {
+		return s.cfg.Default.APIKeyTrialExpiresInDays
+	}
+	return trialRedeemExpiryDays
 }
 
 // invalidateRedeemCaches 失效兑换相关的缓存

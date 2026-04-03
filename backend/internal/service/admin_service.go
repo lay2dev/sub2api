@@ -436,6 +436,10 @@ const (
 	trialCodeLength                   = 6
 )
 
+const maxTrialCodeGenerationAttempts = 64
+
+var trialInvitationCodeGenerator = generateTrialInvitationCode
+
 // adminServiceImpl implements AdminService
 type adminServiceImpl struct {
 	userRepo             UserRepository
@@ -2075,7 +2079,7 @@ func (s *adminServiceImpl) GenerateRedeemCodes(ctx context.Context, input *Gener
 	for i := 0; i < input.Count; i++ {
 		codeValue, err := GenerateRedeemCode()
 		if input.Type == RedeemTypeAPIKeyTrial {
-			codeValue, err = generateTrialInvitationCode()
+			codeValue, err = s.generateUniqueTrialInvitationCode(ctx)
 		}
 		if err != nil {
 			return nil, err
@@ -2119,6 +2123,23 @@ func generateTrialInvitationCode() (string, error) {
 		code[i] = trialCodeCharset[int(b)%len(trialCodeCharset)]
 	}
 	return string(code), nil
+}
+
+func (s *adminServiceImpl) generateUniqueTrialInvitationCode(ctx context.Context) (string, error) {
+	for attempt := 0; attempt < maxTrialCodeGenerationAttempts; attempt++ {
+		code, err := trialInvitationCodeGenerator()
+		if err != nil {
+			return "", err
+		}
+		existing, err := s.redeemCodeRepo.GetByCode(ctx, code)
+		if errors.Is(err, ErrRedeemCodeNotFound) || existing == nil {
+			return code, nil
+		}
+		if err != nil {
+			return "", err
+		}
+	}
+	return "", fmt.Errorf("failed to generate unique trial invitation code after %d attempts", maxTrialCodeGenerationAttempts)
 }
 
 func (s *adminServiceImpl) DeleteRedeemCode(ctx context.Context, id int64) error {
