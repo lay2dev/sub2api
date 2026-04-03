@@ -2067,6 +2067,12 @@ func (s *adminServiceImpl) GenerateRedeemCodes(ctx context.Context, input *Gener
 			Value:  input.Value,
 			Status: StatusUnused,
 		}
+		if input.Type == RedeemTypeAPIKeyTrial {
+			code.Type = RedeemTypeAPIKeyTrial
+			code.Value = 0
+			code.MaxUses = 100
+			code.UsedCount = 0
+		}
 		// 订阅类型专用字段
 		if input.Type == RedeemTypeSubscription {
 			code.GroupID = input.GroupID
