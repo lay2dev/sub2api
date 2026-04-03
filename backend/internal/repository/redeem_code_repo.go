@@ -196,17 +196,20 @@ func (r *redeemCodeRepository) Update(ctx context.Context, code *service.RedeemC
 
 func (r *redeemCodeRepository) CreateUsage(ctx context.Context, usage *service.RedeemCodeUsage) error {
 	client := clientFromContext(ctx, r.client)
-	created, err := client.RedeemCodeUsage.Create().
+	builder := client.RedeemCodeUsage.Create().
 		SetRedeemCodeID(usage.RedeemCodeID).
 		SetUserID(usage.UserID).
-		SetAPIKeyID(usage.APIKeyID).
-		SetUsedAt(usage.UsedAt).
-		Save(ctx)
+		SetAPIKeyID(usage.APIKeyID)
+	if !usage.UsedAt.IsZero() {
+		builder.SetUsedAt(usage.UsedAt)
+	}
+	created, err := builder.Save(ctx)
 	if err != nil {
 		return err
 	}
 
 	usage.ID = created.ID
+	usage.UsedAt = created.UsedAt
 	return nil
 }
 

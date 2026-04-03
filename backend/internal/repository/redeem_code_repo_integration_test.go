@@ -8,7 +8,6 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
-	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/suite"
@@ -73,7 +72,7 @@ func (s *RedeemCodeRepoSuite) TestCreate() {
 func (s *RedeemCodeRepoSuite) TestCreate_TrialCodePersistsUsageCounters() {
 	code := &service.RedeemCode{
 		Code:      "TRIAL-CREATE",
-		Type:      domain.RedeemTypeAPIKeyTrial,
+		Type:      service.RedeemTypeAPIKeyTrial,
 		Value:     0,
 		Status:    service.StatusUnused,
 		MaxUses:   3,
@@ -86,7 +85,7 @@ func (s *RedeemCodeRepoSuite) TestCreate_TrialCodePersistsUsageCounters() {
 
 	got, err := s.repo.GetByID(s.ctx, code.ID)
 	s.Require().NoError(err, "GetByID")
-	s.Require().Equal(domain.RedeemTypeAPIKeyTrial, got.Type)
+	s.Require().Equal(service.RedeemTypeAPIKeyTrial, got.Type)
 	s.Require().Equal(3, got.MaxUses)
 	s.Require().Equal(1, got.UsedCount)
 }
@@ -252,7 +251,7 @@ func (s *RedeemCodeRepoSuite) TestCreateUsageAndGetUsageByRedeemCodeAndUser() {
 
 	code := &service.RedeemCode{
 		Code:      "TRIAL-USAGE",
-		Type:      domain.RedeemTypeAPIKeyTrial,
+		Type:      service.RedeemTypeAPIKeyTrial,
 		Value:     0,
 		Status:    service.StatusUnused,
 		MaxUses:   5,
@@ -279,6 +278,39 @@ func (s *RedeemCodeRepoSuite) TestCreateUsageAndGetUsageByRedeemCodeAndUser() {
 	s.Require().Equal(user.ID, got.UserID)
 	s.Require().Equal(createdAPIKey.ID, got.APIKeyID)
 	s.Require().True(got.UsedAt.Equal(usedAt), "used_at should round-trip")
+}
+
+func (s *RedeemCodeRepoSuite) TestCreateUsage_DefaultUsedAt() {
+	user := s.createUser(uniqueTestValue(s.T(), "trial-default-used-at") + "@example.com")
+	createdAPIKey, err := s.client.APIKey.Create().
+		SetUserID(user.ID).
+		SetKey(uniqueTestValue(s.T(), "sk-default-used-at")).
+		SetName("trial-issued-key-default-used-at").
+		SetStatus(service.StatusActive).
+		Save(s.ctx)
+	s.Require().NoError(err, "create api key")
+
+	code := &service.RedeemCode{
+		Code:      "TRIAL-USAGE-DEFAULT",
+		Type:      service.RedeemTypeAPIKeyTrial,
+		Value:     0,
+		Status:    service.StatusUnused,
+		MaxUses:   5,
+		UsedCount: 0,
+	}
+	s.Require().NoError(s.repo.Create(s.ctx, code), "create trial redeem code")
+
+	before := time.Now().UTC().Add(-2 * time.Second)
+	usage := &service.RedeemCodeUsage{
+		RedeemCodeID: code.ID,
+		UserID:       user.ID,
+		APIKeyID:     createdAPIKey.ID,
+	}
+
+	err = s.repo.CreateUsage(s.ctx, usage)
+	s.Require().NoError(err, "CreateUsage")
+	s.Require().False(usage.UsedAt.IsZero(), "expected used_at to be populated from DB default")
+	s.Require().True(usage.UsedAt.After(before), "expected used_at to be near now")
 }
 
 // --- Use ---
