@@ -78,6 +78,8 @@ func (s *APIKeyRepoSuite) TestCreate_TxContextRollback() {
 	}()
 
 	txCtx := dbent.NewTxContext(context.Background(), tx)
+	txClient := clientFromContext(txCtx, baseClient)
+	require.Same(tx.Client(), txClient, "clientFromContext should yield tx client when a tx is present")
 
 	key := &service.APIKey{
 		UserID: userEnt.ID,
