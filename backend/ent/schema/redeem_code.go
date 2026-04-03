@@ -55,6 +55,10 @@ func (RedeemCode) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
+		field.Int("max_uses").
+			Default(1),
+		field.Int("used_count").
+			Default(0),
 		field.String("notes").
 			Optional().
 			Nillable().

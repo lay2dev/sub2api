@@ -133,3 +133,24 @@ func TestCreateAndRedeem_BalanceIgnoresSubscriptionFields(t *testing.T) {
 	assert.NotEqual(t, http.StatusBadRequest, code,
 		"balance type should not require group_id or validity_days")
 }
+
+func TestGenerateRedeemCodes_AcceptsAPIKeyTrialType(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	h := &RedeemHandler{adminService: newStubAdminService()}
+
+	body := map[string]any{
+		"count": 1,
+		"type":  "api_key_trial",
+		"value": 0,
+	}
+	jsonBytes, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	c.Request, _ = http.NewRequest(http.MethodPost, "/api/v1/admin/redeem-codes/generate", bytes.NewReader(jsonBytes))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	h.Generate(c)
+	assert.NotEqual(t, http.StatusBadRequest, w.Code, "api_key_trial should pass request validation")
+}

@@ -300,6 +300,14 @@ func (s *redeemRepoStub) Use(ctx context.Context, id, userID int64) error {
 	panic("unexpected Use call")
 }
 
+func (s *redeemRepoStub) CreateUsage(ctx context.Context, usage *RedeemCodeUsage) error {
+	panic("unexpected CreateUsage call")
+}
+
+func (s *redeemRepoStub) GetUsageByRedeemCodeAndUser(ctx context.Context, redeemCodeID, userID int64) (*RedeemCodeUsage, error) {
+	panic("unexpected GetUsageByRedeemCodeAndUser call")
+}
+
 func (s *redeemRepoStub) List(ctx context.Context, params pagination.PaginationParams) ([]RedeemCode, *pagination.PaginationResult, error) {
 	panic("unexpected List call")
 }
@@ -310,6 +318,10 @@ func (s *redeemRepoStub) ListWithFilters(ctx context.Context, params pagination.
 
 func (s *redeemRepoStub) ListByUser(ctx context.Context, userID int64, limit int) ([]RedeemCode, error) {
 	panic("unexpected ListByUser call")
+}
+
+func (s *redeemRepoStub) ListUsagesByUser(ctx context.Context, userID int64, limit int) ([]RedeemCodeUsage, error) {
+	panic("unexpected ListUsagesByUser call")
 }
 
 func (s *redeemRepoStub) ListByUserPaginated(ctx context.Context, userID int64, params pagination.PaginationParams, codeType string) ([]RedeemCode, *pagination.PaginationResult, error) {

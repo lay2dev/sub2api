@@ -14,14 +14,31 @@ type RedeemCode struct {
 	Status    string
 	UsedBy    *int64
 	UsedAt    *time.Time
+	MaxUses   int
+	UsedCount int
 	Notes     string
 	CreatedAt time.Time
 
 	GroupID      *int64
 	ValidityDays int
 
-	User  *User
-	Group *Group
+	User         *User
+	Group        *Group
+	IssuedAPIKey *APIKey
+
+	UsageRecords []RedeemCodeUsage
+}
+
+type RedeemCodeUsage struct {
+	ID           int64
+	RedeemCodeID int64
+	UserID       int64
+	APIKeyID     int64
+	UsedAt       time.Time
+
+	RedeemCode *RedeemCode
+	User       *User
+	APIKey     *APIKey
 }
 
 func (r *RedeemCode) IsUsed() bool {

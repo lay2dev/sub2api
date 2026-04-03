@@ -818,7 +818,14 @@ export default {
     codeRedeemSuccess: '兑换成功！',
     failedToRedeem: '兑换失败，请检查兑换码后重试。',
     subscriptionRefreshFailed: '兑换成功，但订阅状态刷新失败。',
-    pleaseEnterCode: '请输入兑换码'
+    pleaseEnterCode: '请输入兑换码',
+    trialApiKeyTitle: '您的试用 API 密钥',
+    trialApiKeyHint: '该密钥仅展示一次，请立即复制并妥善保存。',
+    trialApiKeyLabel: 'API 密钥',
+    trialQuotaLabel: '额度',
+    trialExpiresAtLabel: '过期时间',
+    copyTrialApiKey: '复制',
+    trialApiKeyCopied: 'API 密钥已复制'
   },
 
   // Profile
@@ -3153,6 +3160,8 @@ export default {
         concurrency: '并发数',
         subscription: '订阅',
         invitation: '邀请码',
+        api_key_trial: '试用 API Key',
+        partially_used: '部分已使用',
         // 管理员在用户管理页面调整余额/并发时产生的记录
         admin_balance: '余额（管理员）',
         admin_concurrency: '并发数（管理员）'
@@ -3162,7 +3171,11 @@ export default {
       concurrency: '并发数',
       subscription: '订阅',
       invitation: '邀请码',
+      apiKeyTrial: '试用 API Key',
       invitationHint: '邀请码用于限制用户注册，使用后自动标记为已使用。',
+      apiKeyTrialHint: '生成 6 位试用邀请码。试用额度、使用次数和有效期由后端配置控制。',
+      apiKeyTrialValueLabel: '试用 API Key',
+      apiKeyTrialUsageSummary: '已使用 {used}/{max} · 剩余 {remaining}',
       allTypes: '全部类型',
       allStatus: '全部状态',
       unused: '未使用',

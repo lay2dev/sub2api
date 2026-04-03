@@ -100,6 +100,34 @@ func (_c *RedeemCodeCreate) SetNillableUsedAt(v *time.Time) *RedeemCodeCreate {
 	return _c
 }
 
+// SetMaxUses sets the "max_uses" field.
+func (_c *RedeemCodeCreate) SetMaxUses(v int) *RedeemCodeCreate {
+	_c.mutation.SetMaxUses(v)
+	return _c
+}
+
+// SetNillableMaxUses sets the "max_uses" field if the given value is not nil.
+func (_c *RedeemCodeCreate) SetNillableMaxUses(v *int) *RedeemCodeCreate {
+	if v != nil {
+		_c.SetMaxUses(*v)
+	}
+	return _c
+}
+
+// SetUsedCount sets the "used_count" field.
+func (_c *RedeemCodeCreate) SetUsedCount(v int) *RedeemCodeCreate {
+	_c.mutation.SetUsedCount(v)
+	return _c
+}
+
+// SetNillableUsedCount sets the "used_count" field if the given value is not nil.
+func (_c *RedeemCodeCreate) SetNillableUsedCount(v *int) *RedeemCodeCreate {
+	if v != nil {
+		_c.SetUsedCount(*v)
+	}
+	return _c
+}
+
 // SetNotes sets the "notes" field.
 func (_c *RedeemCodeCreate) SetNotes(v string) *RedeemCodeCreate {
 	_c.mutation.SetNotes(v)
@@ -227,6 +255,14 @@ func (_c *RedeemCodeCreate) defaults() {
 		v := redeemcode.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.MaxUses(); !ok {
+		v := redeemcode.DefaultMaxUses
+		_c.mutation.SetMaxUses(v)
+	}
+	if _, ok := _c.mutation.UsedCount(); !ok {
+		v := redeemcode.DefaultUsedCount
+		_c.mutation.SetUsedCount(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := redeemcode.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -265,6 +301,12 @@ func (_c *RedeemCodeCreate) check() error {
 		if err := redeemcode.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "RedeemCode.status": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.MaxUses(); !ok {
+		return &ValidationError{Name: "max_uses", err: errors.New(`ent: missing required field "RedeemCode.max_uses"`)}
+	}
+	if _, ok := _c.mutation.UsedCount(); !ok {
+		return &ValidationError{Name: "used_count", err: errors.New(`ent: missing required field "RedeemCode.used_count"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "RedeemCode.created_at"`)}
@@ -318,6 +360,14 @@ func (_c *RedeemCodeCreate) createSpec() (*RedeemCode, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UsedAt(); ok {
 		_spec.SetField(redeemcode.FieldUsedAt, field.TypeTime, value)
 		_node.UsedAt = &value
+	}
+	if value, ok := _c.mutation.MaxUses(); ok {
+		_spec.SetField(redeemcode.FieldMaxUses, field.TypeInt, value)
+		_node.MaxUses = value
+	}
+	if value, ok := _c.mutation.UsedCount(); ok {
+		_spec.SetField(redeemcode.FieldUsedCount, field.TypeInt, value)
+		_node.UsedCount = value
 	}
 	if value, ok := _c.mutation.Notes(); ok {
 		_spec.SetField(redeemcode.FieldNotes, field.TypeString, value)
@@ -504,6 +554,42 @@ func (u *RedeemCodeUpsert) UpdateUsedAt() *RedeemCodeUpsert {
 // ClearUsedAt clears the value of the "used_at" field.
 func (u *RedeemCodeUpsert) ClearUsedAt() *RedeemCodeUpsert {
 	u.SetNull(redeemcode.FieldUsedAt)
+	return u
+}
+
+// SetMaxUses sets the "max_uses" field.
+func (u *RedeemCodeUpsert) SetMaxUses(v int) *RedeemCodeUpsert {
+	u.Set(redeemcode.FieldMaxUses, v)
+	return u
+}
+
+// UpdateMaxUses sets the "max_uses" field to the value that was provided on create.
+func (u *RedeemCodeUpsert) UpdateMaxUses() *RedeemCodeUpsert {
+	u.SetExcluded(redeemcode.FieldMaxUses)
+	return u
+}
+
+// AddMaxUses adds v to the "max_uses" field.
+func (u *RedeemCodeUpsert) AddMaxUses(v int) *RedeemCodeUpsert {
+	u.Add(redeemcode.FieldMaxUses, v)
+	return u
+}
+
+// SetUsedCount sets the "used_count" field.
+func (u *RedeemCodeUpsert) SetUsedCount(v int) *RedeemCodeUpsert {
+	u.Set(redeemcode.FieldUsedCount, v)
+	return u
+}
+
+// UpdateUsedCount sets the "used_count" field to the value that was provided on create.
+func (u *RedeemCodeUpsert) UpdateUsedCount() *RedeemCodeUpsert {
+	u.SetExcluded(redeemcode.FieldUsedCount)
+	return u
+}
+
+// AddUsedCount adds v to the "used_count" field.
+func (u *RedeemCodeUpsert) AddUsedCount(v int) *RedeemCodeUpsert {
+	u.Add(redeemcode.FieldUsedCount, v)
 	return u
 }
 
@@ -708,6 +794,48 @@ func (u *RedeemCodeUpsertOne) UpdateUsedAt() *RedeemCodeUpsertOne {
 func (u *RedeemCodeUpsertOne) ClearUsedAt() *RedeemCodeUpsertOne {
 	return u.Update(func(s *RedeemCodeUpsert) {
 		s.ClearUsedAt()
+	})
+}
+
+// SetMaxUses sets the "max_uses" field.
+func (u *RedeemCodeUpsertOne) SetMaxUses(v int) *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetMaxUses(v)
+	})
+}
+
+// AddMaxUses adds v to the "max_uses" field.
+func (u *RedeemCodeUpsertOne) AddMaxUses(v int) *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.AddMaxUses(v)
+	})
+}
+
+// UpdateMaxUses sets the "max_uses" field to the value that was provided on create.
+func (u *RedeemCodeUpsertOne) UpdateMaxUses() *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateMaxUses()
+	})
+}
+
+// SetUsedCount sets the "used_count" field.
+func (u *RedeemCodeUpsertOne) SetUsedCount(v int) *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetUsedCount(v)
+	})
+}
+
+// AddUsedCount adds v to the "used_count" field.
+func (u *RedeemCodeUpsertOne) AddUsedCount(v int) *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.AddUsedCount(v)
+	})
+}
+
+// UpdateUsedCount sets the "used_count" field to the value that was provided on create.
+func (u *RedeemCodeUpsertOne) UpdateUsedCount() *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateUsedCount()
 	})
 }
 
@@ -1087,6 +1215,48 @@ func (u *RedeemCodeUpsertBulk) UpdateUsedAt() *RedeemCodeUpsertBulk {
 func (u *RedeemCodeUpsertBulk) ClearUsedAt() *RedeemCodeUpsertBulk {
 	return u.Update(func(s *RedeemCodeUpsert) {
 		s.ClearUsedAt()
+	})
+}
+
+// SetMaxUses sets the "max_uses" field.
+func (u *RedeemCodeUpsertBulk) SetMaxUses(v int) *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetMaxUses(v)
+	})
+}
+
+// AddMaxUses adds v to the "max_uses" field.
+func (u *RedeemCodeUpsertBulk) AddMaxUses(v int) *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.AddMaxUses(v)
+	})
+}
+
+// UpdateMaxUses sets the "max_uses" field to the value that was provided on create.
+func (u *RedeemCodeUpsertBulk) UpdateMaxUses() *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateMaxUses()
+	})
+}
+
+// SetUsedCount sets the "used_count" field.
+func (u *RedeemCodeUpsertBulk) SetUsedCount(v int) *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetUsedCount(v)
+	})
+}
+
+// AddUsedCount adds v to the "used_count" field.
+func (u *RedeemCodeUpsertBulk) AddUsedCount(v int) *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.AddUsedCount(v)
+	})
+}
+
+// UpdateUsedCount sets the "used_count" field to the value that was provided on create.
+func (u *RedeemCodeUpsertBulk) UpdateUsedCount() *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateUsedCount()
 	})
 }
 

@@ -6,6 +6,7 @@ import (
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
+	"github.com/Wei-Shaw/sub2api/ent/redeemcodeusage"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -20,7 +21,8 @@ func NewRedeemCodeRepository(client *dbent.Client) service.RedeemCodeRepository 
 }
 
 func (r *redeemCodeRepository) Create(ctx context.Context, code *service.RedeemCode) error {
-	created, err := r.client.RedeemCode.Create().
+	client := clientFromContext(ctx, r.client)
+	builder := client.RedeemCode.Create().
 		SetCode(code.Code).
 		SetType(code.Type).
 		SetValue(code.Value).
@@ -29,11 +31,19 @@ func (r *redeemCodeRepository) Create(ctx context.Context, code *service.RedeemC
 		SetValidityDays(code.ValidityDays).
 		SetNillableUsedBy(code.UsedBy).
 		SetNillableUsedAt(code.UsedAt).
-		SetNillableGroupID(code.GroupID).
-		Save(ctx)
+		SetNillableGroupID(code.GroupID)
+	if code.MaxUses > 0 {
+		builder.SetMaxUses(code.MaxUses)
+	}
+	if code.UsedCount > 0 {
+		builder.SetUsedCount(code.UsedCount)
+	}
+	created, err := builder.Save(ctx)
 	if err == nil {
 		code.ID = created.ID
 		code.CreatedAt = created.CreatedAt
+		code.MaxUses = created.MaxUses
+		code.UsedCount = created.UsedCount
 	}
 	return err
 }
@@ -43,10 +53,11 @@ func (r *redeemCodeRepository) CreateBatch(ctx context.Context, codes []service.
 		return nil
 	}
 
+	client := clientFromContext(ctx, r.client)
 	builders := make([]*dbent.RedeemCodeCreate, 0, len(codes))
 	for i := range codes {
 		c := &codes[i]
-		b := r.client.RedeemCode.Create().
+		b := client.RedeemCode.Create().
 			SetCode(c.Code).
 			SetType(c.Type).
 			SetValue(c.Value).
@@ -56,10 +67,16 @@ func (r *redeemCodeRepository) CreateBatch(ctx context.Context, codes []service.
 			SetNillableUsedBy(c.UsedBy).
 			SetNillableUsedAt(c.UsedAt).
 			SetNillableGroupID(c.GroupID)
+		if c.MaxUses > 0 {
+			b.SetMaxUses(c.MaxUses)
+		}
+		if c.UsedCount > 0 {
+			b.SetUsedCount(c.UsedCount)
+		}
 		builders = append(builders, b)
 	}
 
-	return r.client.RedeemCode.CreateBulk(builders...).Exec(ctx)
+	return client.RedeemCode.CreateBulk(builders...).Exec(ctx)
 }
 
 func (r *redeemCodeRepository) GetByID(ctx context.Context, id int64) (*service.RedeemCode, error) {
@@ -137,11 +154,14 @@ func (r *redeemCodeRepository) ListWithFilters(ctx context.Context, params pagin
 }
 
 func (r *redeemCodeRepository) Update(ctx context.Context, code *service.RedeemCode) error {
-	up := r.client.RedeemCode.UpdateOneID(code.ID).
+	client := clientFromContext(ctx, r.client)
+	up := client.RedeemCode.UpdateOneID(code.ID).
 		SetCode(code.Code).
 		SetType(code.Type).
 		SetValue(code.Value).
 		SetStatus(code.Status).
+		SetMaxUses(code.MaxUses).
+		SetUsedCount(code.UsedCount).
 		SetNotes(code.Notes).
 		SetValidityDays(code.ValidityDays)
 
@@ -169,7 +189,45 @@ func (r *redeemCodeRepository) Update(ctx context.Context, code *service.RedeemC
 		return err
 	}
 	code.CreatedAt = updated.CreatedAt
+	code.MaxUses = updated.MaxUses
+	code.UsedCount = updated.UsedCount
 	return nil
+}
+
+func (r *redeemCodeRepository) CreateUsage(ctx context.Context, usage *service.RedeemCodeUsage) error {
+	client := clientFromContext(ctx, r.client)
+	builder := client.RedeemCodeUsage.Create().
+		SetRedeemCodeID(usage.RedeemCodeID).
+		SetUserID(usage.UserID).
+		SetAPIKeyID(usage.APIKeyID)
+	if !usage.UsedAt.IsZero() {
+		builder.SetUsedAt(usage.UsedAt)
+	}
+	created, err := builder.Save(ctx)
+	if err != nil {
+		return err
+	}
+
+	usage.ID = created.ID
+	usage.UsedAt = created.UsedAt
+	return nil
+}
+
+func (r *redeemCodeRepository) GetUsageByRedeemCodeAndUser(ctx context.Context, redeemCodeID, userID int64) (*service.RedeemCodeUsage, error) {
+	client := clientFromContext(ctx, r.client)
+	m, err := client.RedeemCodeUsage.Query().
+		Where(
+			redeemcodeusage.RedeemCodeIDEQ(redeemCodeID),
+			redeemcodeusage.UserIDEQ(userID),
+		).
+		Only(ctx)
+	if err != nil {
+		if dbent.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return redeemCodeUsageEntityToService(m), nil
 }
 
 func (r *redeemCodeRepository) Use(ctx context.Context, id, userID int64) error {
@@ -206,6 +264,60 @@ func (r *redeemCodeRepository) ListByUser(ctx context.Context, userID int64, lim
 	}
 
 	return redeemCodeEntitiesToService(codes), nil
+}
+
+func (r *redeemCodeRepository) ListUsagesByUser(ctx context.Context, userID int64, limit int) ([]service.RedeemCodeUsage, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+
+	usages, err := r.client.RedeemCodeUsage.Query().
+		Where(redeemcodeusage.UserIDEQ(userID)).
+		Order(dbent.Desc(redeemcodeusage.FieldUsedAt)).
+		Limit(limit).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(usages) == 0 {
+		return []service.RedeemCodeUsage{}, nil
+	}
+
+	redeemCodeIDs := make([]int64, 0, len(usages))
+	seen := make(map[int64]struct{}, len(usages))
+	for _, usage := range usages {
+		if _, ok := seen[usage.RedeemCodeID]; ok {
+			continue
+		}
+		seen[usage.RedeemCodeID] = struct{}{}
+		redeemCodeIDs = append(redeemCodeIDs, usage.RedeemCodeID)
+	}
+
+	codes, err := r.client.RedeemCode.Query().
+		Where(redeemcode.IDIn(redeemCodeIDs...)).
+		WithGroup().
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	codeMap := make(map[int64]*service.RedeemCode, len(codes))
+	for _, code := range codes {
+		codeMap[code.ID] = redeemCodeEntityToService(code)
+	}
+
+	out := make([]service.RedeemCodeUsage, 0, len(usages))
+	for _, usage := range usages {
+		converted := redeemCodeUsageEntityToService(usage)
+		if converted == nil {
+			continue
+		}
+		if code, ok := codeMap[usage.RedeemCodeID]; ok {
+			clone := *code
+			converted.RedeemCode = &clone
+		}
+		out = append(out, *converted)
+	}
+	return out, nil
 }
 
 // ListByUserPaginated returns paginated balance/concurrency history for a user.
@@ -271,6 +383,8 @@ func redeemCodeEntityToService(m *dbent.RedeemCode) *service.RedeemCode {
 		Status:       m.Status,
 		UsedBy:       m.UsedBy,
 		UsedAt:       m.UsedAt,
+		MaxUses:      m.MaxUses,
+		UsedCount:    m.UsedCount,
 		Notes:        derefString(m.Notes),
 		CreatedAt:    m.CreatedAt,
 		GroupID:      m.GroupID,
@@ -293,4 +407,17 @@ func redeemCodeEntitiesToService(models []*dbent.RedeemCode) []service.RedeemCod
 		}
 	}
 	return out
+}
+
+func redeemCodeUsageEntityToService(m *dbent.RedeemCodeUsage) *service.RedeemCodeUsage {
+	if m == nil {
+		return nil
+	}
+	return &service.RedeemCodeUsage{
+		ID:           m.ID,
+		RedeemCodeID: m.RedeemCodeID,
+		UserID:       m.UserID,
+		APIKeyID:     m.APIKeyID,
+		UsedAt:       m.UsedAt,
+	}
 }

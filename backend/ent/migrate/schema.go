@@ -668,6 +668,8 @@ var (
 		{Name: "value", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
 		{Name: "status", Type: field.TypeString, Size: 20, Default: "unused"},
 		{Name: "used_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "max_uses", Type: field.TypeInt, Default: 1},
+		{Name: "used_count", Type: field.TypeInt, Default: 0},
 		{Name: "notes", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
 		{Name: "validity_days", Type: field.TypeInt, Default: 30},
@@ -682,13 +684,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "redeem_codes_groups_redeem_codes",
-				Columns:    []*schema.Column{RedeemCodesColumns[9]},
+				Columns:    []*schema.Column{RedeemCodesColumns[11]},
 				RefColumns: []*schema.Column{GroupsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "redeem_codes_users_redeem_codes",
-				Columns:    []*schema.Column{RedeemCodesColumns[10]},
+				Columns:    []*schema.Column{RedeemCodesColumns[12]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -702,12 +704,48 @@ var (
 			{
 				Name:    "redeemcode_used_by",
 				Unique:  false,
-				Columns: []*schema.Column{RedeemCodesColumns[10]},
+				Columns: []*schema.Column{RedeemCodesColumns[12]},
 			},
 			{
 				Name:    "redeemcode_group_id",
 				Unique:  false,
-				Columns: []*schema.Column{RedeemCodesColumns[9]},
+				Columns: []*schema.Column{RedeemCodesColumns[11]},
+			},
+		},
+	}
+	// RedeemCodeUsagesColumns holds the columns for the "redeem_code_usages" table.
+	RedeemCodeUsagesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "redeem_code_id", Type: field.TypeInt64},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "api_key_id", Type: field.TypeInt64},
+		{Name: "used_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// RedeemCodeUsagesTable holds the schema information for the "redeem_code_usages" table.
+	RedeemCodeUsagesTable = &schema.Table{
+		Name:       "redeem_code_usages",
+		Columns:    RedeemCodeUsagesColumns,
+		PrimaryKey: []*schema.Column{RedeemCodeUsagesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "redeemcodeusage_redeem_code_id",
+				Unique:  false,
+				Columns: []*schema.Column{RedeemCodeUsagesColumns[1]},
+			},
+			{
+				Name:    "redeemcodeusage_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{RedeemCodeUsagesColumns[2]},
+			},
+			{
+				Name:    "redeemcodeusage_api_key_id",
+				Unique:  false,
+				Columns: []*schema.Column{RedeemCodeUsagesColumns[3]},
+			},
+			{
+				Name:    "redeemcodeusage_redeem_code_id_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{RedeemCodeUsagesColumns[1], RedeemCodeUsagesColumns[2]},
 			},
 		},
 	}
@@ -1171,6 +1209,7 @@ var (
 		PromoCodeUsagesTable,
 		ProxiesTable,
 		RedeemCodesTable,
+		RedeemCodeUsagesTable,
 		SecuritySecretsTable,
 		SettingsTable,
 		UsageCleanupTasksTable,
@@ -1236,6 +1275,9 @@ func init() {
 	RedeemCodesTable.ForeignKeys[1].RefTable = UsersTable
 	RedeemCodesTable.Annotation = &entsql.Annotation{
 		Table: "redeem_codes",
+	}
+	RedeemCodeUsagesTable.Annotation = &entsql.Annotation{
+		Table: "redeem_code_usages",
 	}
 	SecuritySecretsTable.Annotation = &entsql.Annotation{
 		Table: "security_secrets",

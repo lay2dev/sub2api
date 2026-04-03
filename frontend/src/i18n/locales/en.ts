@@ -813,7 +813,14 @@ export default {
     codeRedeemSuccess: 'Code redeemed successfully!',
     failedToRedeem: 'Failed to redeem code. Please check the code and try again.',
     subscriptionRefreshFailed: 'Redeemed successfully, but failed to refresh subscription status.',
-    pleaseEnterCode: 'Please enter a redeem code'
+    pleaseEnterCode: 'Please enter a redeem code',
+    trialApiKeyTitle: 'Your Trial API Key',
+    trialApiKeyHint: 'This key is shown only once. Copy and store it now.',
+    trialApiKeyLabel: 'API Key',
+    trialQuotaLabel: 'Quota',
+    trialExpiresAtLabel: 'Expires At',
+    copyTrialApiKey: 'Copy',
+    trialApiKeyCopied: 'API key copied'
   },
 
   // Profile
@@ -3018,7 +3025,12 @@ export default {
       concurrency: 'Concurrency',
       subscription: 'Subscription',
       invitation: 'Invitation',
+      apiKeyTrial: 'Trial API Key',
       invitationHint: 'Invitation codes are used to restrict user registration. They are automatically marked as used after use.',
+      apiKeyTrialHint:
+        'Generates 6-character trial invitation codes. Trial quota, max uses, and expiry are controlled by backend config.',
+      apiKeyTrialValueLabel: 'Trial API Key',
+      apiKeyTrialUsageSummary: 'Used {used}/{max} · {remaining} remaining',
       unused: 'Unused',
       used: 'Used',
       columns: {
@@ -3066,6 +3078,8 @@ export default {
         concurrency: 'Concurrency',
         subscription: 'Subscription',
         invitation: 'Invitation',
+        api_key_trial: 'Trial API Key',
+        partially_used: 'Partially Used',
         // Admin adjustment types (created when admin modifies user balance/concurrency)
         admin_balance: 'Balance (Admin)',
         admin_concurrency: 'Concurrency (Admin)'

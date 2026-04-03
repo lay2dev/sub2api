@@ -483,19 +483,31 @@ func RedeemCodeFromServiceAdmin(rc *service.RedeemCode) *AdminRedeemCode {
 }
 
 func redeemCodeFromServiceBase(rc *service.RedeemCode) RedeemCode {
+	remainingUses := 0
+	if rc.MaxUses > 0 {
+		remainingUses = rc.MaxUses - rc.UsedCount
+		if remainingUses < 0 {
+			remainingUses = 0
+		}
+	}
+
 	out := RedeemCode{
-		ID:           rc.ID,
-		Code:         rc.Code,
-		Type:         rc.Type,
-		Value:        rc.Value,
-		Status:       rc.Status,
-		UsedBy:       rc.UsedBy,
-		UsedAt:       rc.UsedAt,
-		CreatedAt:    rc.CreatedAt,
-		GroupID:      rc.GroupID,
-		ValidityDays: rc.ValidityDays,
-		User:         UserFromServiceShallow(rc.User),
-		Group:        GroupFromServiceShallow(rc.Group),
+		ID:            rc.ID,
+		Code:          rc.Code,
+		Type:          rc.Type,
+		Value:         rc.Value,
+		Status:        rc.Status,
+		UsedBy:        rc.UsedBy,
+		UsedAt:        rc.UsedAt,
+		MaxUses:       rc.MaxUses,
+		UsedCount:     rc.UsedCount,
+		RemainingUses: remainingUses,
+		CreatedAt:     rc.CreatedAt,
+		GroupID:       rc.GroupID,
+		ValidityDays:  rc.ValidityDays,
+		User:          UserFromServiceShallow(rc.User),
+		Group:         GroupFromServiceShallow(rc.Group),
+		IssuedAPIKey:  APIKeyFromService(rc.IssuedAPIKey),
 	}
 
 	// For admin_balance/admin_concurrency types, include notes so users can see

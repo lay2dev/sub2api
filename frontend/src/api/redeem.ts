@@ -23,6 +23,29 @@ export interface RedeemHistoryItem {
     id: number
     name: string
   }
+  max_uses?: number
+  used_count?: number
+  remaining_uses?: number
+}
+
+export interface IssuedAPIKey {
+  key: string
+  quota?: number
+  expires_at?: string | null
+}
+
+export interface RedeemResponse {
+  message: string
+  type: string
+  value: number
+  new_balance?: number
+  new_concurrency?: number
+  group_name?: string
+  validity_days?: number
+  issued_api_key?: IssuedAPIKey
+  max_uses?: number
+  used_count?: number
+  remaining_uses?: number
 }
 
 /**
@@ -30,22 +53,10 @@ export interface RedeemHistoryItem {
  * @param code - Redeem code string
  * @returns Redemption result with updated balance or concurrency
  */
-export async function redeem(code: string): Promise<{
-  message: string
-  type: string
-  value: number
-  new_balance?: number
-  new_concurrency?: number
-}> {
+export async function redeem(code: string): Promise<RedeemResponse> {
   const payload: RedeemCodeRequest = { code }
 
-  const { data } = await apiClient.post<{
-    message: string
-    type: string
-    value: number
-    new_balance?: number
-    new_concurrency?: number
-  }>('/redeem', payload)
+  const { data } = await apiClient.post<RedeemResponse>('/redeem', payload)
 
   return data
 }

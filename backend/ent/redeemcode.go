@@ -31,6 +31,10 @@ type RedeemCode struct {
 	UsedBy *int64 `json:"used_by,omitempty"`
 	// UsedAt holds the value of the "used_at" field.
 	UsedAt *time.Time `json:"used_at,omitempty"`
+	// MaxUses holds the value of the "max_uses" field.
+	MaxUses int `json:"max_uses,omitempty"`
+	// UsedCount holds the value of the "used_count" field.
+	UsedCount int `json:"used_count,omitempty"`
 	// Notes holds the value of the "notes" field.
 	Notes *string `json:"notes,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
@@ -85,7 +89,7 @@ func (*RedeemCode) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case redeemcode.FieldValue:
 			values[i] = new(sql.NullFloat64)
-		case redeemcode.FieldID, redeemcode.FieldUsedBy, redeemcode.FieldGroupID, redeemcode.FieldValidityDays:
+		case redeemcode.FieldID, redeemcode.FieldUsedBy, redeemcode.FieldMaxUses, redeemcode.FieldUsedCount, redeemcode.FieldGroupID, redeemcode.FieldValidityDays:
 			values[i] = new(sql.NullInt64)
 		case redeemcode.FieldCode, redeemcode.FieldType, redeemcode.FieldStatus, redeemcode.FieldNotes:
 			values[i] = new(sql.NullString)
@@ -149,6 +153,18 @@ func (_m *RedeemCode) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.UsedAt = new(time.Time)
 				*_m.UsedAt = value.Time
+			}
+		case redeemcode.FieldMaxUses:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field max_uses", values[i])
+			} else if value.Valid {
+				_m.MaxUses = int(value.Int64)
+			}
+		case redeemcode.FieldUsedCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field used_count", values[i])
+			} else if value.Valid {
+				_m.UsedCount = int(value.Int64)
 			}
 		case redeemcode.FieldNotes:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -243,6 +259,12 @@ func (_m *RedeemCode) String() string {
 		builder.WriteString("used_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("max_uses=")
+	builder.WriteString(fmt.Sprintf("%v", _m.MaxUses))
+	builder.WriteString(", ")
+	builder.WriteString("used_count=")
+	builder.WriteString(fmt.Sprintf("%v", _m.UsedCount))
 	builder.WriteString(", ")
 	if v := _m.Notes; v != nil {
 		builder.WriteString("notes=")

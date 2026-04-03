@@ -306,6 +306,10 @@ type RedeemCode struct {
 	Status    string     `json:"status"`
 	UsedBy    *int64     `json:"used_by"`
 	UsedAt    *time.Time `json:"used_at"`
+	MaxUses   int        `json:"max_uses"`
+	UsedCount int        `json:"used_count"`
+	// RemainingUses is max(max_uses-used_count, 0). For non-multi-use codes it remains 0.
+	RemainingUses int `json:"remaining_uses"`
 	CreatedAt time.Time  `json:"created_at"`
 
 	GroupID      *int64 `json:"group_id"`
@@ -315,8 +319,9 @@ type RedeemCode struct {
 	// so users can see why they were charged or credited
 	Notes *string `json:"notes,omitempty"`
 
-	User  *User  `json:"user,omitempty"`
-	Group *Group `json:"group,omitempty"`
+	User         *User   `json:"user,omitempty"`
+	Group        *Group  `json:"group,omitempty"`
+	IssuedAPIKey *APIKey `json:"issued_api_key,omitempty"`
 }
 
 // AdminRedeemCode 是管理员接口使用的 redeem code DTO（包含 notes 等字段）。

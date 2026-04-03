@@ -4,6 +4,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -52,6 +53,53 @@ func (s *APIKeyRepoSuite) TestCreate() {
 	got, err := s.repo.GetByID(s.ctx, key.ID)
 	s.Require().NoError(err, "GetByID")
 	s.Require().Equal("sk-create-test", got.Key)
+}
+
+func (s *APIKeyRepoSuite) TestCreate_TxContextRollback() {
+	require := s.Require()
+
+	baseClient := testEntClient(s.T())
+	repo := NewAPIKeyRepository(baseClient, integrationDB)
+
+	userEnt, err := baseClient.User.Create().
+		SetEmail(fmt.Sprintf("tx-create-%d@test.com", time.Now().UnixNano())).
+		SetPasswordHash("tx-password-hash").
+		SetStatus(service.StatusActive).
+		SetRole(service.RoleUser).
+		Save(context.Background())
+	require.NoError(err, "create user outside tx")
+
+	tx, err := baseClient.Tx(context.Background())
+	require.NoError(err, "begin tx")
+	defer func() {
+		if tx != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	txCtx := dbent.NewTxContext(context.Background(), tx)
+	txClient := clientFromContext(txCtx, baseClient)
+	require.Same(tx.Client(), txClient, "clientFromContext should yield tx client when a tx is present")
+
+	key := &service.APIKey{
+		UserID: userEnt.ID,
+		Key:    fmt.Sprintf("sk-tx-%d", time.Now().UnixNano()),
+		Name:   "TX Key",
+		Status: service.StatusActive,
+	}
+
+	require.NoError(repo.Create(txCtx, key), "create key inside tx")
+	require.NotZero(key.ID, "expected ID set inside tx")
+
+	require.NoError(tx.Rollback(), "rollback tx")
+	tx = nil
+
+	exists, err := repo.ExistsByKey(context.Background(), key.Key)
+	require.NoError(err, "exists check after rollback")
+	require.False(exists, "key should not exist after tx rollback")
+
+	_, err = repo.GetByKey(context.Background(), key.Key)
+	require.ErrorIs(err, service.ErrAPIKeyNotFound, "GetByKey should fail after rollback")
 }
 
 func (s *APIKeyRepoSuite) TestGetByID_NotFound() {
