@@ -643,7 +643,7 @@ func newContractDeps(t *testing.T) *contractDeps {
 	subscriptionService := service.NewSubscriptionService(groupRepo, userSubRepo, nil, nil, cfg)
 	subscriptionHandler := handler.NewSubscriptionHandler(subscriptionService)
 
-	redeemService := service.NewRedeemService(redeemRepo, userRepo, subscriptionService, nil, nil, nil, nil)
+	redeemService := service.NewRedeemService(redeemRepo, userRepo, subscriptionService, apiKeyService, nil, nil, nil, nil)
 	redeemHandler := handler.NewRedeemHandler(redeemService)
 
 	settingRepo := newStubSettingRepo()
@@ -1216,6 +1216,14 @@ func (stubRedeemCodeRepo) Use(ctx context.Context, id, userID int64) error {
 	return errors.New("not implemented")
 }
 
+func (stubRedeemCodeRepo) CreateUsage(ctx context.Context, usage *service.RedeemCodeUsage) error {
+	return errors.New("not implemented")
+}
+
+func (stubRedeemCodeRepo) GetUsageByRedeemCodeAndUser(ctx context.Context, redeemCodeID, userID int64) (*service.RedeemCodeUsage, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (stubRedeemCodeRepo) List(ctx context.Context, params pagination.PaginationParams) ([]service.RedeemCode, *pagination.PaginationResult, error) {
 	return nil, nil, errors.New("not implemented")
 }
@@ -1233,6 +1241,10 @@ func (r *stubRedeemCodeRepo) ListByUser(ctx context.Context, userID int64, limit
 		codes = codes[:limit]
 	}
 	return append([]service.RedeemCode(nil), codes...), nil
+}
+
+func (stubRedeemCodeRepo) ListUsagesByUser(ctx context.Context, userID int64, limit int) ([]service.RedeemCodeUsage, error) {
+	return nil, nil
 }
 
 func (stubRedeemCodeRepo) ListByUserPaginated(ctx context.Context, userID int64, params pagination.PaginationParams, codeType string) ([]service.RedeemCode, *pagination.PaginationResult, error) {

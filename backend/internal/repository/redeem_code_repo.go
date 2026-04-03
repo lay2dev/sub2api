@@ -266,6 +266,60 @@ func (r *redeemCodeRepository) ListByUser(ctx context.Context, userID int64, lim
 	return redeemCodeEntitiesToService(codes), nil
 }
 
+func (r *redeemCodeRepository) ListUsagesByUser(ctx context.Context, userID int64, limit int) ([]service.RedeemCodeUsage, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+
+	usages, err := r.client.RedeemCodeUsage.Query().
+		Where(redeemcodeusage.UserIDEQ(userID)).
+		Order(dbent.Desc(redeemcodeusage.FieldUsedAt)).
+		Limit(limit).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(usages) == 0 {
+		return []service.RedeemCodeUsage{}, nil
+	}
+
+	redeemCodeIDs := make([]int64, 0, len(usages))
+	seen := make(map[int64]struct{}, len(usages))
+	for _, usage := range usages {
+		if _, ok := seen[usage.RedeemCodeID]; ok {
+			continue
+		}
+		seen[usage.RedeemCodeID] = struct{}{}
+		redeemCodeIDs = append(redeemCodeIDs, usage.RedeemCodeID)
+	}
+
+	codes, err := r.client.RedeemCode.Query().
+		Where(redeemcode.IDIn(redeemCodeIDs...)).
+		WithGroup().
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	codeMap := make(map[int64]*service.RedeemCode, len(codes))
+	for _, code := range codes {
+		codeMap[code.ID] = redeemCodeEntityToService(code)
+	}
+
+	out := make([]service.RedeemCodeUsage, 0, len(usages))
+	for _, usage := range usages {
+		converted := redeemCodeUsageEntityToService(usage)
+		if converted == nil {
+			continue
+		}
+		if code, ok := codeMap[usage.RedeemCodeID]; ok {
+			clone := *code
+			converted.RedeemCode = &clone
+		}
+		out = append(out, *converted)
+	}
+	return out, nil
+}
+
 // ListByUserPaginated returns paginated balance/concurrency history for a user.
 // Supports optional type filter (e.g. "balance", "admin_balance", "concurrency", "admin_concurrency", "subscription").
 func (r *redeemCodeRepository) ListByUserPaginated(ctx context.Context, userID int64, params pagination.PaginationParams, codeType string) ([]service.RedeemCode, *pagination.PaginationResult, error) {

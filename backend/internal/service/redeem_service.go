@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -17,6 +18,8 @@ import (
 var (
 	ErrRedeemCodeNotFound  = infraerrors.NotFound("REDEEM_CODE_NOT_FOUND", "redeem code not found")
 	ErrRedeemCodeUsed      = infraerrors.Conflict("REDEEM_CODE_USED", "redeem code already used")
+	ErrRedeemCodeExhausted = infraerrors.Conflict("REDEEM_CODE_EXHAUSTED", "redeem code has reached maximum uses")
+	ErrRedeemCodeAlreadyRedeemed = infraerrors.Conflict("REDEEM_CODE_ALREADY_REDEEMED", "you have already redeemed this code")
 	ErrInsufficientBalance = infraerrors.BadRequest("INSUFFICIENT_BALANCE", "insufficient balance")
 	ErrRedeemRateLimited   = infraerrors.TooManyRequests("REDEEM_RATE_LIMITED", "too many failed attempts, please try again later")
 	ErrRedeemCodeLocked    = infraerrors.Conflict("REDEEM_CODE_LOCKED", "redeem code is being processed, please try again")
@@ -26,6 +29,8 @@ const (
 	redeemMaxErrorsPerHour  = 20
 	redeemRateLimitDuration = time.Hour
 	redeemLockDuration      = 10 * time.Second // 锁超时时间，防止死锁
+	trialRedeemQuotaUSD     = 20.0
+	trialRedeemExpiryDays   = 7
 )
 
 // RedeemCache defines cache operations for redeem service
@@ -51,11 +56,16 @@ type RedeemCodeRepository interface {
 	List(ctx context.Context, params pagination.PaginationParams) ([]RedeemCode, *pagination.PaginationResult, error)
 	ListWithFilters(ctx context.Context, params pagination.PaginationParams, codeType, status, search string) ([]RedeemCode, *pagination.PaginationResult, error)
 	ListByUser(ctx context.Context, userID int64, limit int) ([]RedeemCode, error)
+	ListUsagesByUser(ctx context.Context, userID int64, limit int) ([]RedeemCodeUsage, error)
 	// ListByUserPaginated returns paginated balance/concurrency history for a specific user.
 	// codeType filter is optional - pass empty string to return all types.
 	ListByUserPaginated(ctx context.Context, userID int64, params pagination.PaginationParams, codeType string) ([]RedeemCode, *pagination.PaginationResult, error)
 	// SumPositiveBalanceByUser returns the total recharged amount (sum of positive balance values) for a user.
 	SumPositiveBalanceByUser(ctx context.Context, userID int64) (float64, error)
+}
+
+type APIKeyIssuer interface {
+	Create(ctx context.Context, userID int64, req CreateAPIKeyRequest) (*APIKey, error)
 }
 
 // GenerateCodesRequest 生成兑换码请求
@@ -78,6 +88,7 @@ type RedeemService struct {
 	redeemRepo           RedeemCodeRepository
 	userRepo             UserRepository
 	subscriptionService  *SubscriptionService
+	apiKeyIssuer         APIKeyIssuer
 	cache                RedeemCache
 	billingCacheService  *BillingCacheService
 	entClient            *dbent.Client
@@ -89,6 +100,7 @@ func NewRedeemService(
 	redeemRepo RedeemCodeRepository,
 	userRepo UserRepository,
 	subscriptionService *SubscriptionService,
+	apiKeyIssuer APIKeyIssuer,
 	cache RedeemCache,
 	billingCacheService *BillingCacheService,
 	entClient *dbent.Client,
@@ -98,6 +110,7 @@ func NewRedeemService(
 		redeemRepo:           redeemRepo,
 		userRepo:             userRepo,
 		subscriptionService:  subscriptionService,
+		apiKeyIssuer:         apiKeyIssuer,
 		cache:                cache,
 		billingCacheService:  billingCacheService,
 		entClient:            entClient,
@@ -289,13 +302,6 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 		return nil, infraerrors.BadRequest("REDEEM_CODE_INVALID", "invalid subscription redeem code: missing group_id")
 	}
 
-	// 获取用户信息
-	user, err := s.userRepo.GetByID(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("get user: %w", err)
-	}
-	_ = user // 使用变量避免未使用错误
-
 	// 使用数据库事务保证兑换码标记与权益发放的原子性
 	tx, err := s.entClient.Tx(ctx)
 	if err != nil {
@@ -305,6 +311,18 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 
 	// 将事务放入 context，使 repository 方法能够使用同一事务
 	txCtx := dbent.NewTxContext(ctx, tx)
+
+	if redeemCode.Type == RedeemTypeAPIKeyTrial {
+		issuedAPIKey, err := s.redeemAPIKeyTrialTx(txCtx, userID, redeemCode)
+		if err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, fmt.Errorf("commit transaction: %w", err)
+		}
+		redeemCode.IssuedAPIKey = issuedAPIKey
+		return redeemCode, nil
+	}
 
 	// 【关键】先标记兑换码为已使用，确保并发安全
 	// 利用数据库乐观锁（WHERE status = 'unused'）保证原子性
@@ -364,6 +382,54 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 	}
 
 	return redeemCode, nil
+}
+
+func (s *RedeemService) redeemAPIKeyTrialTx(ctx context.Context, userID int64, redeemCode *RedeemCode) (*APIKey, error) {
+	if s.apiKeyIssuer == nil {
+		return nil, fmt.Errorf("api key issuer not configured")
+	}
+	if redeemCode.MaxUses <= 0 || redeemCode.UsedCount >= redeemCode.MaxUses {
+		return nil, ErrRedeemCodeExhausted
+	}
+
+	existingUsage, err := s.redeemRepo.GetUsageByRedeemCodeAndUser(ctx, redeemCode.ID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get redeem code usage: %w", err)
+	}
+	if existingUsage != nil {
+		return nil, ErrRedeemCodeAlreadyRedeemed
+	}
+
+	expiresInDays := trialRedeemExpiryDays
+	issuedAPIKey, err := s.apiKeyIssuer.Create(ctx, userID, CreateAPIKeyRequest{
+		Name:          fmt.Sprintf("Trial Key %s", time.Now().Format("2006-01-02")),
+		Quota:         trialRedeemQuotaUSD,
+		ExpiresInDays: &expiresInDays,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create trial api key: %w", err)
+	}
+
+	usage := &RedeemCodeUsage{
+		RedeemCodeID: redeemCode.ID,
+		UserID:       userID,
+		APIKeyID:     issuedAPIKey.ID,
+		UsedAt:       time.Now().UTC(),
+	}
+	if err := s.redeemRepo.CreateUsage(ctx, usage); err != nil {
+		return nil, fmt.Errorf("create redeem code usage: %w", err)
+	}
+
+	redeemCode.UsedCount++
+	if redeemCode.UsedCount >= redeemCode.MaxUses {
+		redeemCode.Status = StatusUsed
+	}
+	if err := s.redeemRepo.Update(ctx, redeemCode); err != nil {
+		return nil, fmt.Errorf("update redeem code usage count: %w", err)
+	}
+
+	redeemCode.IssuedAPIKey = issuedAPIKey
+	return issuedAPIKey, nil
 }
 
 // invalidateRedeemCaches 失效兑换相关的缓存
@@ -475,5 +541,42 @@ func (s *RedeemService) GetUserHistory(ctx context.Context, userID int64, limit 
 	if err != nil {
 		return nil, fmt.Errorf("get user redeem history: %w", err)
 	}
-	return codes, nil
+
+	trialUsages, err := s.redeemRepo.ListUsagesByUser(ctx, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get user redeem usage history: %w", err)
+	}
+
+	history := append([]RedeemCode{}, codes...)
+	for i := range trialUsages {
+		if mapped, ok := redeemCodeFromUsage(trialUsages[i]); ok {
+			history = append(history, mapped)
+		}
+	}
+
+	sort.Slice(history, func(i, j int) bool {
+		return redeemCodeUsedAt(history[i]).After(redeemCodeUsedAt(history[j]))
+	})
+	if limit > 0 && len(history) > limit {
+		history = history[:limit]
+	}
+	return history, nil
+}
+
+func redeemCodeFromUsage(usage RedeemCodeUsage) (RedeemCode, bool) {
+	if usage.RedeemCode == nil {
+		return RedeemCode{}, false
+	}
+	code := *usage.RedeemCode
+	code.Status = StatusUsed
+	code.UsedAt = &usage.UsedAt
+	code.IssuedAPIKey = nil
+	return code, true
+}
+
+func redeemCodeUsedAt(code RedeemCode) time.Time {
+	if code.UsedAt != nil {
+		return *code.UsedAt
+	}
+	return code.CreatedAt
 }
