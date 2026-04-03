@@ -56,6 +56,8 @@ func (s *APIKeyRepoSuite) TestCreate() {
 }
 
 func (s *APIKeyRepoSuite) TestCreate_TxContextRollback() {
+	require := s.Require()
+
 	baseClient := testEntClient(s.T())
 	repo := NewAPIKeyRepository(baseClient, integrationDB)
 
@@ -65,36 +67,37 @@ func (s *APIKeyRepoSuite) TestCreate_TxContextRollback() {
 		SetStatus(service.StatusActive).
 		SetRole(service.RoleUser).
 		Save(context.Background())
-	s.Require().NoError(err, "create user outside tx")
-
-	user := userEntityToService(userEnt)
+	require.NoError(err, "create user outside tx")
 
 	tx, err := baseClient.Tx(context.Background())
-	s.Require().NoError(err, "begin tx")
+	require.NoError(err, "begin tx")
 	defer func() {
-		_ = tx.Rollback()
+		if tx != nil {
+			_ = tx.Rollback()
+		}
 	}()
 
 	txCtx := dbent.NewTxContext(context.Background(), tx)
 
 	key := &service.APIKey{
-		UserID: user.ID,
+		UserID: userEnt.ID,
 		Key:    fmt.Sprintf("sk-tx-%d", time.Now().UnixNano()),
 		Name:   "TX Key",
 		Status: service.StatusActive,
 	}
 
-	s.Require().NoError(repo.Create(txCtx, key), "create key inside tx")
-	s.Require().NotZero(key.ID, "expected ID set inside tx")
+	require.NoError(repo.Create(txCtx, key), "create key inside tx")
+	require.NotZero(key.ID, "expected ID set inside tx")
 
-	s.Require().NoError(tx.Rollback(), "rollback tx")
+	require.NoError(tx.Rollback(), "rollback tx")
+	tx = nil
 
 	exists, err := repo.ExistsByKey(context.Background(), key.Key)
-	s.Require().NoError(err, "exists check after rollback")
-	s.Require().False(exists, "key should not exist after tx rollback")
+	require.NoError(err, "exists check after rollback")
+	require.False(exists, "key should not exist after tx rollback")
 
 	_, err = repo.GetByKey(context.Background(), key.Key)
-	s.Require().ErrorIs(err, service.ErrAPIKeyNotFound, "GetByKey should fail after rollback")
+	require.ErrorIs(err, service.ErrAPIKeyNotFound, "GetByKey should fail after rollback")
 }
 
 func (s *APIKeyRepoSuite) TestGetByID_NotFound() {
