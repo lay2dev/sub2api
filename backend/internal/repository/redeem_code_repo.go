@@ -21,19 +21,24 @@ func NewRedeemCodeRepository(client *dbent.Client) service.RedeemCodeRepository 
 }
 
 func (r *redeemCodeRepository) Create(ctx context.Context, code *service.RedeemCode) error {
-	created, err := r.client.RedeemCode.Create().
+	client := clientFromContext(ctx, r.client)
+	builder := client.RedeemCode.Create().
 		SetCode(code.Code).
 		SetType(code.Type).
 		SetValue(code.Value).
 		SetStatus(code.Status).
-		SetMaxUses(code.MaxUses).
-		SetUsedCount(code.UsedCount).
 		SetNotes(code.Notes).
 		SetValidityDays(code.ValidityDays).
 		SetNillableUsedBy(code.UsedBy).
 		SetNillableUsedAt(code.UsedAt).
-		SetNillableGroupID(code.GroupID).
-		Save(ctx)
+		SetNillableGroupID(code.GroupID)
+	if code.MaxUses > 0 {
+		builder.SetMaxUses(code.MaxUses)
+	}
+	if code.UsedCount > 0 {
+		builder.SetUsedCount(code.UsedCount)
+	}
+	created, err := builder.Save(ctx)
 	if err == nil {
 		code.ID = created.ID
 		code.CreatedAt = created.CreatedAt
@@ -48,25 +53,30 @@ func (r *redeemCodeRepository) CreateBatch(ctx context.Context, codes []service.
 		return nil
 	}
 
+	client := clientFromContext(ctx, r.client)
 	builders := make([]*dbent.RedeemCodeCreate, 0, len(codes))
 	for i := range codes {
 		c := &codes[i]
-		b := r.client.RedeemCode.Create().
+		b := client.RedeemCode.Create().
 			SetCode(c.Code).
 			SetType(c.Type).
 			SetValue(c.Value).
 			SetStatus(c.Status).
-			SetMaxUses(c.MaxUses).
-			SetUsedCount(c.UsedCount).
 			SetNotes(c.Notes).
 			SetValidityDays(c.ValidityDays).
 			SetNillableUsedBy(c.UsedBy).
 			SetNillableUsedAt(c.UsedAt).
 			SetNillableGroupID(c.GroupID)
+		if c.MaxUses > 0 {
+			b.SetMaxUses(c.MaxUses)
+		}
+		if c.UsedCount > 0 {
+			b.SetUsedCount(c.UsedCount)
+		}
 		builders = append(builders, b)
 	}
 
-	return r.client.RedeemCode.CreateBulk(builders...).Exec(ctx)
+	return client.RedeemCode.CreateBulk(builders...).Exec(ctx)
 }
 
 func (r *redeemCodeRepository) GetByID(ctx context.Context, id int64) (*service.RedeemCode, error) {
@@ -144,7 +154,8 @@ func (r *redeemCodeRepository) ListWithFilters(ctx context.Context, params pagin
 }
 
 func (r *redeemCodeRepository) Update(ctx context.Context, code *service.RedeemCode) error {
-	up := r.client.RedeemCode.UpdateOneID(code.ID).
+	client := clientFromContext(ctx, r.client)
+	up := client.RedeemCode.UpdateOneID(code.ID).
 		SetCode(code.Code).
 		SetType(code.Type).
 		SetValue(code.Value).

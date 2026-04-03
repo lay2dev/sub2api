@@ -66,6 +66,8 @@ func (s *RedeemCodeRepoSuite) TestCreate() {
 	got, err := s.repo.GetByID(s.ctx, code.ID)
 	s.Require().NoError(err, "GetByID")
 	s.Require().Equal("TEST-CREATE", got.Code)
+	s.Require().Equal(1, got.MaxUses, "legacy redeem codes should default to single use")
+	s.Require().Equal(0, got.UsedCount)
 }
 
 func (s *RedeemCodeRepoSuite) TestCreate_TrialCodePersistsUsageCounters() {
