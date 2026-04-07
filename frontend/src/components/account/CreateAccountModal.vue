@@ -3016,6 +3016,7 @@ const openaiPassthroughEnabled = ref(false)
 const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const codexCLIOnlyEnabled = ref(false)
+const cryptoRouterEnabled = ref(false)
 const anthropicPassthroughEnabled = ref(false)
 const mixedScheduling = ref(false) // For antigravity accounts: enable mixed scheduling
 const allowOverages = ref(false) // For antigravity accounts: enable AI Credits overages
@@ -3346,6 +3347,7 @@ watch(
       openaiOAuthResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
       openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
       codexCLIOnlyEnabled.value = false
+      cryptoRouterEnabled.value = false
     }
     if (newPlatform !== 'anthropic') {
       anthropicPassthroughEnabled.value = false
@@ -3803,6 +3805,12 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
     delete extra.codex_cli_only
   }
 
+  if (cryptoRouterEnabled.value) {
+    extra.crypto_router = true
+  } else {
+    delete extra.crypto_router
+  }
+
   return Object.keys(extra).length > 0 ? extra : undefined
 }
 
@@ -3835,6 +3843,7 @@ const buildSoraExtra = (
   delete extra.openai_passthrough
   delete extra.openai_oauth_passthrough
   delete extra.codex_cli_only
+  delete extra.crypto_router
   delete extra.openai_oauth_responses_websockets_v2_mode
   delete extra.openai_apikey_responses_websockets_v2_mode
   delete extra.openai_oauth_responses_websockets_v2_enabled
