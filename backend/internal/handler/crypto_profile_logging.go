@@ -7,8 +7,15 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
+)
+
+const (
+	cryptoProfileOriginalMessageContextKey = "crypto_profile_original_message"
+	cryptoProfileMatchedContextKey         = "crypto_profile_matched"
+	cryptoProfileContextKey                = "crypto_profile"
 )
 
 func maybeLogCryptoProfileMatch(
@@ -71,7 +78,9 @@ func detectCryptoProfileMatch(
 	if err != nil {
 		reqLog.Warn("gateway.crypto_profile_detection_failed",
 			zap.String("entrypoint", entrypoint),
+			zap.String("original_message", trimmed),
 			zap.Int("message_chars", len(trimmed)),
+			zap.String("error_reason", err.Error()),
 			zap.Error(err),
 		)
 		return nil
@@ -100,6 +109,58 @@ func detectCryptoProfileMatch(
 		zap.Int("message_chars", len(trimmed)),
 	)
 	return result
+}
+
+func setCryptoProfileLogContext(c *gin.Context, message string, result *service.CryptoProfileMatchResult) {
+	if c == nil {
+		return
+	}
+
+	trimmed := strings.TrimSpace(message)
+	if trimmed != "" {
+		c.Set(cryptoProfileOriginalMessageContextKey, trimmed)
+	}
+
+	matched := result != nil && result.Matched
+	c.Set(cryptoProfileMatchedContextKey, matched)
+
+	if !matched {
+		return
+	}
+	if profile := strings.TrimSpace(result.Profile); profile != "" {
+		c.Set(cryptoProfileContextKey, profile)
+	}
+}
+
+func cryptoUpstreamFailureLogFields(c *gin.Context, errorReason string) ([]zap.Field, bool) {
+	if c == nil {
+		return nil, false
+	}
+
+	rawMatched, ok := c.Get(cryptoProfileMatchedContextKey)
+	if !ok {
+		return nil, false
+	}
+	matched, _ := rawMatched.(bool)
+	if !matched {
+		return nil, false
+	}
+
+	fields := make([]zap.Field, 0, 3)
+	if rawMessage, ok := c.Get(cryptoProfileOriginalMessageContextKey); ok {
+		if originalMessage, ok := rawMessage.(string); ok && strings.TrimSpace(originalMessage) != "" {
+			fields = append(fields, zap.String("crypto_original_message", originalMessage))
+		}
+	}
+	if rawProfile, ok := c.Get(cryptoProfileContextKey); ok {
+		if profile, ok := rawProfile.(string); ok && strings.TrimSpace(profile) != "" {
+			fields = append(fields, zap.String("crypto_profile", profile))
+		}
+	}
+	if reason := strings.TrimSpace(errorReason); reason != "" {
+		fields = append(fields, zap.String("error_reason", reason))
+	}
+	return fields, len(fields) > 0
 }
 
 func extractCryptoProfileMessageTextFromParsedRequest(parsed *service.ParsedRequest) string {

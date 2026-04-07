@@ -246,13 +246,15 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 		h.handleStreamingAwareError(c, status, code, message, streamStarted)
 		return
 	}
-	maybeLogCryptoProfileMatch(
+	cryptoMessage := extractCryptoProfileMessageTextFromParsedRequest(parsedReq)
+	cryptoMatch := detectCryptoProfileMatch(
 		c.Request.Context(),
 		reqLog,
 		h.cryptoProfileDetector,
-		extractCryptoProfileMessageTextFromParsedRequest(parsedReq),
+		cryptoMessage,
 		EndpointMessages,
 	)
+	setCryptoProfileLogContext(c, cryptoMessage, cryptoMatch)
 
 	// 计算粘性会话hash
 	parsedReq.SessionContext = &service.SessionContext{
@@ -1204,6 +1206,11 @@ func (h *GatewayHandler) handleConcurrencyError(c *gin.Context, err error, slotT
 func (h *GatewayHandler) handleFailoverExhausted(c *gin.Context, failoverErr *service.UpstreamFailoverError, platform string, streamStarted bool) {
 	statusCode := failoverErr.StatusCode
 	responseBody := failoverErr.ResponseBody
+	upstreamMsg := service.ExtractUpstreamErrorMessage(responseBody)
+	if fields, ok := cryptoUpstreamFailureLogFields(c, upstreamMsg); ok {
+		fields = append(fields, zap.String("platform", platform), zap.Int("upstream_status", statusCode))
+		requestLogger(c, "handler.gateway.crypto_upstream").Warn("gateway.crypto_upstream_failed", fields...)
+	}
 
 	// 先检查透传规则
 	if h.errorPassthroughService != nil && len(responseBody) > 0 {
@@ -1230,7 +1237,6 @@ func (h *GatewayHandler) handleFailoverExhausted(c *gin.Context, failoverErr *se
 	}
 
 	// 记录原始上游状态码，以便 ops 错误日志捕获真实的上游错误
-	upstreamMsg := service.ExtractUpstreamErrorMessage(responseBody)
 	service.SetOpsUpstreamError(c, statusCode, upstreamMsg, "")
 
 	// 使用默认的错误映射
