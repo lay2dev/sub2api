@@ -101,13 +101,15 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		h.handleStreamingAwareError(c, status, code, message, streamStarted)
 		return
 	}
+	cryptoMessage := extractCryptoProfileMessageTextFromMessagesBody(body)
 	cryptoMatch := detectCryptoProfileMatch(
 		c.Request.Context(),
 		reqLog,
 		h.cryptoProfileDetector,
-		extractCryptoProfileMessageTextFromMessagesBody(body),
+		cryptoMessage,
 		EndpointChatCompletions,
 	)
+	setCryptoProfileLogContext(c, cryptoMessage, cryptoMatch)
 
 	forwardBody := body
 	var cryptoPrefetchPrepared *service.OpenAICryptoChatPreparation

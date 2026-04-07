@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -130,4 +131,58 @@ func TestDetectCryptoProfileMatch_LogsNotMatchedResult(t *testing.T) {
 	require.True(t, logSink.ContainsMessageAtLevel("gateway.crypto_profile_detection_invoking", "info"))
 	require.True(t, logSink.ContainsMessageAtLevel("gateway.crypto_profile_not_matched", "info"))
 	require.True(t, logSink.ContainsFieldValue("detector_model", "gpt-5.2"))
+}
+
+func TestDetectCryptoProfileMatch_LogsOriginalMessageAndErrorReasonOnDetectorFailure(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logSink, restore := captureHandlerStructuredLog(t)
+	defer restore()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+
+	detector := &stubCryptoProfileDetector{
+		enabled: true,
+		err:     errors.New("upstream detector timeout"),
+	}
+
+	reqLog := requestLogger(c, "handler.openai_gateway.chat_completions")
+	result := detectCryptoProfileMatch(c.Request.Context(), reqLog, detector, "帮我分析 BTC 和 ETH 走势", "/v1/chat/completions")
+
+	require.Nil(t, result)
+	require.True(t, logSink.ContainsMessageAtLevel("gateway.crypto_profile_detection_failed", "warn"))
+	require.True(t, logSink.ContainsFieldValue("original_message", "帮我分析 BTC 和 ETH 走势"))
+	require.True(t, logSink.ContainsFieldValue("error_reason", "upstream detector timeout"))
+}
+
+func TestOpenAIHandleFailoverExhausted_LogsCryptoOriginalMessageAndReason(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logSink, restore := captureHandlerStructuredLog(t)
+	defer restore()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+
+	setCryptoProfileLogContext(c, "swap 10 ETH to USDC，分析最佳路径", &service.CryptoProfileMatchResult{
+		Matched: true,
+		Profile: "dex-routing",
+		Model:   "openai/gpt-5.2",
+	})
+
+	h := &OpenAIGatewayHandler{}
+	h.handleFailoverExhausted(c, &service.UpstreamFailoverError{
+		StatusCode: http.StatusBadGateway,
+		ResponseBody: []byte(`{
+			"error": {
+				"message": "agent upstream overloaded"
+			}
+		}`),
+	}, false)
+
+	require.True(t, logSink.ContainsMessageAtLevel("openai.crypto_upstream_failed", "warn"))
+	require.True(t, logSink.ContainsFieldValue("crypto_original_message", "swap 10 ETH to USDC"))
+	require.True(t, logSink.ContainsFieldValue("error_reason", "agent upstream overloaded"))
+	require.True(t, logSink.ContainsFieldValue("crypto_profile", "dex-routing"))
 }

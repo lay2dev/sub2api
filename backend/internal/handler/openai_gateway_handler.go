@@ -573,13 +573,15 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		h.anthropicStreamingAwareError(c, status, code, message, streamStarted)
 		return
 	}
-	maybeLogCryptoProfileMatch(
+	cryptoMessage := extractCryptoProfileMessageTextFromMessagesBody(body)
+	cryptoMatch := detectCryptoProfileMatch(
 		c.Request.Context(),
 		reqLog,
 		h.cryptoProfileDetector,
-		extractCryptoProfileMessageTextFromMessagesBody(body),
+		cryptoMessage,
 		EndpointMessages,
 	)
+	setCryptoProfileLogContext(c, cryptoMessage, cryptoMatch)
 
 	sessionHash := h.gatewayService.GenerateSessionHash(c, body)
 	promptCacheKey := h.gatewayService.ExtractSessionID(c, body)
@@ -1430,6 +1432,11 @@ func (h *OpenAIGatewayHandler) handleConcurrencyError(c *gin.Context, err error,
 func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverErr *service.UpstreamFailoverError, streamStarted bool) {
 	statusCode := failoverErr.StatusCode
 	responseBody := failoverErr.ResponseBody
+	upstreamMsg := service.ExtractUpstreamErrorMessage(responseBody)
+	if fields, ok := cryptoUpstreamFailureLogFields(c, upstreamMsg); ok {
+		fields = append(fields, zap.Int("upstream_status", statusCode))
+		requestLogger(c, "handler.openai_gateway.crypto_upstream").Warn("openai.crypto_upstream_failed", fields...)
+	}
 
 	// 先检查透传规则
 	if h.errorPassthroughService != nil && len(responseBody) > 0 {
@@ -1456,7 +1463,6 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
 	}
 
 	// 记录原始上游状态码，以便 ops 错误日志捕获真实的上游错误
-	upstreamMsg := service.ExtractUpstreamErrorMessage(responseBody)
 	service.SetOpsUpstreamError(c, statusCode, upstreamMsg, "")
 
 	// 使用默认的错误映射
