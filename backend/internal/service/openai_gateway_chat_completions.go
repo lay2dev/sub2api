@@ -353,6 +353,19 @@ func (s *OpenAIGatewayService) fetchCryptoDataViaResponses(
 		return nil, fmt.Errorf("marshal responses body: %w", err)
 	}
 
+	// Apply the same OAuth codex transform that ForwardAsChatCompletions uses.
+	// This extracts system messages into instructions (required by chatgptCodexURL)
+	// and strips unsupported parameters.
+	var reqBody map[string]any
+	if err := json.Unmarshal(responsesBody, &reqBody); err != nil {
+		return nil, fmt.Errorf("unmarshal for codex transform: %w", err)
+	}
+	applyCodexOAuthTransform(reqBody, false, false)
+	responsesBody, err = json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("remarshal after codex transform: %w", err)
+	}
+
 	upstreamReq, err := s.buildUpstreamRequest(ctx, c, account, responsesBody, token, true, "", false)
 	if err != nil {
 		return nil, err
