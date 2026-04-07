@@ -194,9 +194,9 @@ func (s *OpenAIGatewayService) fetchCryptoDataForChatCompletions(
 			return nil, fmt.Errorf("set mapped model: %w", err)
 		}
 	}
-	forwardBody, err = sjson.SetBytes(forwardBody, "stream", false)
+	forwardBody, err = sjson.SetBytes(forwardBody, "stream", true)
 	if err != nil {
-		return nil, fmt.Errorf("disable upstream stream: %w", err)
+		return nil, fmt.Errorf("enable upstream stream: %w", err)
 	}
 
 	token := ""
@@ -214,6 +214,7 @@ func (s *OpenAIGatewayService) fetchCryptoDataForChatCompletions(
 	if err != nil {
 		return nil, err
 	}
+	upstreamReq.Header.Set("Accept", "text/event-stream")
 
 	proxyURL := ""
 	if account.Proxy != nil {
@@ -280,6 +281,10 @@ func (s *OpenAIGatewayService) fetchCryptoDataForChatCompletions(
 	if err != nil {
 		return nil, err
 	}
+	respBody, err = normalizeCryptoChatPrefetchResponseBody(resp.Header, respBody)
+	if err != nil {
+		return nil, err
+	}
 
 	var payload struct {
 		Model  string               `json:"model"`
@@ -316,6 +321,38 @@ func (s *OpenAIGatewayService) fetchCryptoDataForChatCompletions(
 			Duration:      time.Since(startTime),
 		},
 	}, nil
+}
+
+func normalizeCryptoChatPrefetchResponseBody(headers http.Header, body []byte) ([]byte, error) {
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) == 0 {
+		return nil, fmt.Errorf("crypto provider response is empty")
+	}
+	if !isEventStreamResponse(headers) && !bytes.HasPrefix(trimmed, []byte("data:")) && !bytes.Contains(trimmed, []byte("\ndata:")) {
+		return trimmed, nil
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(trimmed))
+	scanner.Buffer(make([]byte, 0, 64*1024), defaultMaxLineSize)
+
+	var lastJSON []byte
+	for scanner.Scan() {
+		data, ok := extractOpenAISSEDataLine(scanner.Text())
+		if !ok || data == "" || data == "[DONE]" {
+			continue
+		}
+		if !gjson.Valid(data) {
+			continue
+		}
+		lastJSON = append(lastJSON[:0], data...)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read crypto provider stream: %w", err)
+	}
+	if len(lastJSON) == 0 {
+		return nil, fmt.Errorf("crypto provider stream missing terminal json payload")
+	}
+	return lastJSON, nil
 }
 
 // ForwardAsChatCompletions accepts a Chat Completions request body, converts it

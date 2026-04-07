@@ -195,7 +195,7 @@ func TestOpenAIGatewayService_ForwardChatCompletionsPassthrough_StreamWrapsProvi
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.True(t, result.Stream)
-	require.Equal(t, false, gjson.GetBytes(upstream.lastBody, "stream").Bool())
+	require.False(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
 	require.Contains(t, rec.Body.String(), `"object":"chat.completion.chunk"`)
 	require.Contains(t, rec.Body.String(), "data: [DONE]")
 }
@@ -364,7 +364,8 @@ func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_PrependsCryptoDat
 	require.NotNil(t, upstream.lastReq)
 	require.Equal(t, "https://crypto-provider.example.com/v1/chat/completions", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer sk-provider", upstream.lastReq.Header.Get("Authorization"))
-	require.False(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
+	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
+	require.Equal(t, "text/event-stream", upstream.lastReq.Header.Get("Accept"))
 
 	enhancedBody := prepared.EnhancedBody
 	require.True(t, gjson.GetBytes(enhancedBody, "stream").Bool())
@@ -379,6 +380,74 @@ func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_PrependsCryptoDat
 	require.Contains(t, injected, `"intent":"token_analysis"`)
 	require.Contains(t, injected, `"name":"coinglass"`)
 	require.NotNil(t, prepared.PrefetchResult)
+}
+
+func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_ParsesCryptoDataFromStreamPayload(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "X-Request-ID": []string{"rid_crypto_data_stream"}},
+		Body: io.NopCloser(strings.NewReader(
+			"data: {\"id\":\"chatcmpl_crypto_stream_1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"}}]}\n\n" +
+				"data: {\"id\":\"chatcmpl_crypto_stream_1\",\"object\":\"chat.completion\",\"model\":\"gpt-5.2\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":\"stop\"}],\"crypto\":{\"crypto_data\":{\"intent\":\"token_analysis\",\"sources\":[{\"name\":\"coinglass\",\"status\":\"success\"}]}}}\n\n" +
+				"data: [DONE]\n\n",
+		)),
+	}
+	upstream := &httpUpstreamRecorder{resp: resp}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model":"gpt-5.2",
+		"stream":true,
+		"messages":[{"role":"user","content":"btc funding rate"}]
+	}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{
+			Security: config.SecurityConfig{
+				URLAllowlist: config.URLAllowlistConfig{
+					Enabled:           false,
+					AllowInsecureHTTP: true,
+				},
+			},
+		},
+		httpUpstream: upstream,
+	}
+	account := &Account{
+		ID:          77008,
+		Name:        "owlia-crypto-provider-enhance-stream",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"api_key":  "sk-provider",
+			"base_url": "https://crypto-provider.example.com",
+		},
+		Extra: map[string]any{
+			"crypto_router": true,
+		},
+	}
+
+	prepared, err := svc.PrepareCryptoEnhancedChatRequest(
+		context.Background(),
+		c,
+		account,
+		[]byte(`{
+			"model":"gpt-5.2",
+			"stream":true,
+			"messages":[{"role":"user","content":"btc funding rate"}]
+		}`),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, prepared)
+	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
+	require.Contains(t, gjson.GetBytes(prepared.EnhancedBody, "messages.0.content").String(), "<crypto_data>")
+	require.Contains(t, gjson.GetBytes(prepared.EnhancedBody, "messages.0.content").String(), `"intent":"token_analysis"`)
 }
 
 func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_UsesAccountDefaultModelWithMinimalCryptoEnvelope(t *testing.T) {
