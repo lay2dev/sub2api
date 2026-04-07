@@ -3032,6 +3032,12 @@ const handleSubmit = async () => {
         }
       }
 
+      if (cryptoRouterEnabled.value) {
+        newExtra.crypto_router = true
+      } else {
+        delete newExtra.crypto_router
+      }
+
       updatePayload.extra = newExtra
     }
 
