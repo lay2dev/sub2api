@@ -431,11 +431,7 @@ func (h *OpenAIGatewayHandler) submitOpenAIChatUsageRecord(
 
 	upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
 	if account.IsOpenAICryptoRouter() {
-		if account.IsOpenAIOAuth() {
-			upstreamEndpoint = EndpointResponses
-		} else {
-			upstreamEndpoint = EndpointChatCompletions
-		}
+		upstreamEndpoint = EndpointChatCompletions
 	}
 	h.submitUsageRecordTask(func(ctx context.Context) {
 		if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
