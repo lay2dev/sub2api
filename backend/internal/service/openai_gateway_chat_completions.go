@@ -210,6 +210,11 @@ func (s *OpenAIGatewayService) fetchCryptoDataForChatCompletions(
 		}
 	}
 
+	// OAuth crypto router accounts must use the Responses API path
+	if account.IsOpenAIOAuth() {
+		return s.fetchCryptoDataViaResponses(ctx, c, account, forwardBody, token, startTime, prefetchModel)
+	}
+
 	upstreamReq, err := s.buildChatCompletionsPassthroughRequest(ctx, c, account, forwardBody, token, requiresAuth)
 	if err != nil {
 		return nil, err
@@ -320,6 +325,217 @@ func (s *OpenAIGatewayService) fetchCryptoDataForChatCompletions(
 			Duration:      time.Since(startTime),
 		},
 	}, nil
+}
+
+// fetchCryptoDataViaResponses handles crypto prefetch for OAuth crypto router
+// accounts. It converts the Chat Completions body to Responses API format,
+// forwards via buildUpstreamRequest (which hardcodes chatgptCodexURL for OAuth),
+// and extracts crypto_data from the Responses SSE terminal event.
+func (s *OpenAIGatewayService) fetchCryptoDataViaResponses(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	body []byte,
+	token string,
+	startTime time.Time,
+	prefetchModel string,
+) (*openAICryptoChatFetchResult, error) {
+	var chatReq apicompat.ChatCompletionsRequest
+	if err := json.Unmarshal(body, &chatReq); err != nil {
+		return nil, fmt.Errorf("parse prefetch body: %w", err)
+	}
+	responsesReq, err := apicompat.ChatCompletionsToResponses(&chatReq)
+	if err != nil {
+		return nil, fmt.Errorf("convert to responses: %w", err)
+	}
+	responsesBody, err := json.Marshal(responsesReq)
+	if err != nil {
+		return nil, fmt.Errorf("marshal responses body: %w", err)
+	}
+
+	upstreamReq, err := s.buildUpstreamRequest(ctx, c, account, responsesBody, token, true, "", false)
+	if err != nil {
+		return nil, err
+	}
+
+	proxyURL := ""
+	if account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+	if err != nil {
+		return nil, fmt.Errorf("upstream request failed: %s", sanitizeUpstreamErrorMessage(err.Error()))
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+		return nil, fmt.Errorf("upstream error %d: %s", resp.StatusCode, sanitizeUpstreamErrorMessage(extractUpstreamErrorMessage(respBody)))
+	}
+
+	maxBytes := resolveUpstreamResponseReadLimit(s.cfg)
+	respBody, err := readUpstreamResponseBodyLimited(resp.Body, maxBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	cryptoData, usage, billingModel, err := extractCryptoDataFromResponsesSSE(respBody, resp.Header)
+	if err != nil {
+		return nil, err
+	}
+	if billingModel == "" {
+		billingModel = prefetchModel
+	}
+	return &openAICryptoChatFetchResult{
+		CryptoData: cryptoData,
+		PrefetchResult: &OpenAIForwardResult{
+			RequestID:     resp.Header.Get("x-request-id"),
+			Usage:         usage,
+			Model:         billingModel,
+			BillingModel:  billingModel,
+			UpstreamModel: billingModel,
+			Stream:        false,
+			Duration:      time.Since(startTime),
+		},
+	}, nil
+}
+
+// extractCryptoDataFromResponsesSSE scans a Responses API SSE stream, finds the
+// response.completed terminal event, extracts the first text output item, and
+// returns the crypto.crypto_data from that JSON.
+func extractCryptoDataFromResponsesSSE(body []byte, header http.Header) (json.RawMessage, OpenAIUsage, string, error) {
+	contentType := header.Get("Content-Type")
+	if !strings.Contains(contentType, "text/event-stream") {
+		return extractCryptoDataFromResponsesJSON(body)
+	}
+
+	type responsesUsage struct {
+		InputTokens  int `json:"input_tokens"`
+		OutputTokens int `json:"output_tokens"`
+	}
+	var finalEvent struct {
+		Type     string `json:"type"`
+		Response struct {
+			Model  string `json:"model"`
+			Output []struct {
+				Content []struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"output"`
+			Usage *responsesUsage `json:"usage"`
+		} `json:"response"`
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(body))
+	scanner.Buffer(make([]byte, 0, 64*1024), defaultMaxLineSize)
+	found := false
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") || line == "data: [DONE]" {
+			continue
+		}
+		payload := line[6:]
+		var ev struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal([]byte(payload), &ev); err != nil {
+			continue
+		}
+		if ev.Type == "response.completed" || ev.Type == "response.incomplete" {
+			if err := json.Unmarshal([]byte(payload), &finalEvent); err == nil {
+				found = true
+			}
+		}
+	}
+	if !found {
+		return nil, OpenAIUsage{}, "", fmt.Errorf("responses SSE stream ended without terminal event")
+	}
+
+	var text string
+	for _, out := range finalEvent.Response.Output {
+		for _, c := range out.Content {
+			if c.Type == "output_text" && c.Text != "" {
+				text = c.Text
+				break
+			}
+		}
+		if text != "" {
+			break
+		}
+	}
+	if text == "" {
+		return nil, OpenAIUsage{}, "", fmt.Errorf("responses SSE: no text output found")
+	}
+
+	var usage OpenAIUsage
+	if finalEvent.Response.Usage != nil {
+		usage.InputTokens = finalEvent.Response.Usage.InputTokens
+		usage.OutputTokens = finalEvent.Response.Usage.OutputTokens
+	}
+
+	cryptoData, _, model, err := extractCryptoDataFromText([]byte(text), finalEvent.Response.Model)
+	return cryptoData, usage, model, err
+}
+
+func extractCryptoDataFromResponsesJSON(body []byte) (json.RawMessage, OpenAIUsage, string, error) {
+	type responsesUsage struct {
+		InputTokens  int `json:"input_tokens"`
+		OutputTokens int `json:"output_tokens"`
+	}
+	var resp struct {
+		Model  string `json:"model"`
+		Output []struct {
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"output"`
+		Usage *responsesUsage `json:"usage"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, OpenAIUsage{}, "", fmt.Errorf("parse responses JSON: %w", err)
+	}
+
+	var text string
+	for _, out := range resp.Output {
+		for _, c := range out.Content {
+			if c.Type == "output_text" && c.Text != "" {
+				text = c.Text
+				break
+			}
+		}
+		if text != "" {
+			break
+		}
+	}
+
+	var usage OpenAIUsage
+	if resp.Usage != nil {
+		usage.InputTokens = resp.Usage.InputTokens
+		usage.OutputTokens = resp.Usage.OutputTokens
+	}
+
+	cryptoData, _, model, err := extractCryptoDataFromText([]byte(text), resp.Model)
+	return cryptoData, usage, model, err
+}
+
+func extractCryptoDataFromText(text []byte, model string) (json.RawMessage, OpenAIUsage, string, error) {
+	var payload struct {
+		Crypto struct {
+			CryptoData json.RawMessage `json:"crypto_data"`
+		} `json:"crypto"`
+	}
+	if err := json.Unmarshal(text, &payload); err != nil {
+		return nil, OpenAIUsage{}, model, fmt.Errorf("parse crypto data from text: %w", err)
+	}
+	cryptoData := bytes.TrimSpace(payload.Crypto.CryptoData)
+	if len(cryptoData) == 0 || bytes.Equal(cryptoData, []byte("null")) {
+		return nil, OpenAIUsage{}, model, fmt.Errorf("crypto provider response missing crypto.crypto_data")
+	}
+	out := make(json.RawMessage, len(cryptoData))
+	copy(out, cryptoData)
+	return out, OpenAIUsage{}, model, nil
 }
 
 func normalizeCryptoChatPrefetchResponseBody(headers http.Header, body []byte) ([]byte, error) {
@@ -893,6 +1109,12 @@ func (s *OpenAIGatewayService) ForwardChatCompletionsPassthrough(
 		}
 	}
 
+	// OAuth crypto router accounts: use ForwardAsChatCompletions which handles
+	// body conversion (Chat Completions → Responses) and routes to chatgptCodexURL.
+	if account.IsOpenAIOAuth() {
+		return s.ForwardAsChatCompletions(ctx, c, account, body, "", defaultMappedModel)
+	}
+
 	upstreamReq, err := s.buildChatCompletionsPassthroughRequest(ctx, c, account, forwardBody, token, requiresAuth)
 	if err != nil {
 		return nil, err
@@ -978,12 +1200,7 @@ func (s *OpenAIGatewayService) buildChatCompletionsPassthroughRequest(
 	if err != nil {
 		return nil, err
 	}
-	var targetURL string
-	if account.IsOpenAIOAuth() {
-		targetURL = buildOpenAIResponsesURL(validatedURL)
-	} else {
-		targetURL = buildOpenAIChatCompletionsURL(validatedURL)
-	}
+	targetURL := buildOpenAIChatCompletionsURL(validatedURL)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
 	if err != nil {
