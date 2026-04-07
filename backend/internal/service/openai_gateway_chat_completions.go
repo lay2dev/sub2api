@@ -364,20 +364,15 @@ func (s *OpenAIGatewayService) fetchCryptoDataViaResponses(
 		return nil, fmt.Errorf("unmarshal for codex transform: %w", err)
 	}
 	applyCodexOAuthTransform(reqBody, false, false)
-	// Crypto prefetch must be non-streaming: override stream=false after the
-	// transform (which forces stream=true for the main OAuth path).
-	reqBody["stream"] = false
 	responsesBody, err = json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("remarshal after codex transform: %w", err)
 	}
 
-	upstreamReq, err := s.buildUpstreamRequest(ctx, c, account, responsesBody, token, false, "", false)
+	upstreamReq, err := s.buildUpstreamRequest(ctx, c, account, responsesBody, token, true, "", false)
 	if err != nil {
 		return nil, err
 	}
-	// Non-streaming prefetch: expect plain JSON, not SSE.
-	upstreamReq.Header.Set("accept", "application/json")
 
 	proxyURL := ""
 	if account.Proxy != nil {
