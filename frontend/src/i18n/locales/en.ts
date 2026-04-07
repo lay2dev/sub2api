@@ -2203,6 +2203,9 @@ export default {
         codexCLIOnly: 'Codex official clients only',
         codexCLIOnlyDesc:
           'Only applies to OpenAI OAuth. When enabled, only Codex official client families are allowed; when disabled, the gateway bypasses this restriction and keeps existing behavior.',
+        cryptoRouter: 'Crypto Router',
+        cryptoRouterDesc:
+          'When enabled, this account is marked as a crypto provider. The scheduler will route crypto-enhanced requests exclusively to accounts with this flag.',
         modelRestrictionDisabledByPassthrough: 'Automatic passthrough is enabled: model whitelist/mapping will not take effect.',
         enableSora: 'Enable Sora simultaneously',
         enableSoraHint: 'Sora uses the same OpenAI account. Enable to create Sora account simultaneously.'
