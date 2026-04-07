@@ -418,7 +418,11 @@ func (s *OpenAIGatewayService) fetchCryptoDataViaResponses(
 // returns the crypto.crypto_data from that JSON.
 func extractCryptoDataFromResponsesSSE(body []byte, header http.Header) (json.RawMessage, OpenAIUsage, string, error) {
 	contentType := header.Get("Content-Type")
-	if !strings.Contains(contentType, "text/event-stream") {
+	trimmed := bytes.TrimSpace(body)
+	isSSE := strings.Contains(contentType, "text/event-stream") ||
+		bytes.HasPrefix(trimmed, []byte("data:")) ||
+		bytes.HasPrefix(trimmed, []byte("event:"))
+	if !isSSE {
 		return extractCryptoDataFromResponsesJSON(body)
 	}
 
