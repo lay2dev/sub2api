@@ -194,9 +194,9 @@ func (s *OpenAIGatewayService) fetchCryptoDataForChatCompletions(
 			return nil, fmt.Errorf("set mapped model: %w", err)
 		}
 	}
-	forwardBody, err = sjson.SetBytes(forwardBody, "stream", true)
+	forwardBody, err = sjson.SetBytes(forwardBody, "stream", false)
 	if err != nil {
-		return nil, fmt.Errorf("enable upstream stream: %w", err)
+		return nil, fmt.Errorf("disable upstream stream: %w", err)
 	}
 
 	token := ""

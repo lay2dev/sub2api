@@ -364,7 +364,7 @@ func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_PrependsCryptoDat
 	require.NotNil(t, upstream.lastReq)
 	require.Equal(t, "https://crypto-provider.example.com/v1/chat/completions", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer sk-provider", upstream.lastReq.Header.Get("Authorization"))
-	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
+	require.False(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
 	require.Empty(t, upstream.lastReq.Header.Get("Accept"))
 
 	enhancedBody := prepared.EnhancedBody
@@ -445,7 +445,7 @@ func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_ParsesCryptoDataF
 	)
 	require.NoError(t, err)
 	require.NotNil(t, prepared)
-	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
+	require.False(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
 	require.Contains(t, gjson.GetBytes(prepared.EnhancedBody, "messages.0.content").String(), "<crypto_data>")
 	require.Contains(t, gjson.GetBytes(prepared.EnhancedBody, "messages.0.content").String(), `"intent":"token_analysis"`)
 }
