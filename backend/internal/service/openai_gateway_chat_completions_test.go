@@ -365,7 +365,7 @@ func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_PrependsCryptoDat
 	require.Equal(t, "https://crypto-provider.example.com/v1/chat/completions", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer sk-provider", upstream.lastReq.Header.Get("Authorization"))
 	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
-	require.Equal(t, "text/event-stream", upstream.lastReq.Header.Get("Accept"))
+	require.Empty(t, upstream.lastReq.Header.Get("Accept"))
 
 	enhancedBody := prepared.EnhancedBody
 	require.True(t, gjson.GetBytes(enhancedBody, "stream").Bool())

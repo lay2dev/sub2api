@@ -214,7 +214,6 @@ func (s *OpenAIGatewayService) fetchCryptoDataForChatCompletions(
 	if err != nil {
 		return nil, err
 	}
-	upstreamReq.Header.Set("Accept", "text/event-stream")
 
 	proxyURL := ""
 	if account.Proxy != nil {
