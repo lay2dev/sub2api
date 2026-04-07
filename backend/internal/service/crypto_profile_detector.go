@@ -1,10 +1,12 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -63,6 +65,7 @@ type openRouterChatMessage struct {
 
 type openRouterChatCompletionRequest struct {
 	Model          string                   `json:"model"`
+	Stream         bool                     `json:"stream"`
 	Messages       []openRouterChatMessage  `json:"messages"`
 	Temperature    float64                  `json:"temperature"`
 	MaxTokens      int                      `json:"max_tokens"`
@@ -85,6 +88,14 @@ type openRouterChatCompletionResponse struct {
 		Message struct {
 			Content string `json:"content"`
 		} `json:"message"`
+	} `json:"choices"`
+}
+
+type openRouterChatCompletionChunk struct {
+	Choices []struct {
+		Delta struct {
+			Content string `json:"content"`
+		} `json:"delta"`
 	} `json:"choices"`
 }
 
@@ -162,7 +173,8 @@ func (d *OpenRouterCryptoProfileDetector) Detect(ctx context.Context, message st
 	}
 
 	payload := openRouterChatCompletionRequest{
-		Model: d.model,
+		Model:  d.model,
+		Stream: true,
 		Messages: []openRouterChatMessage{
 			{
 				Role: "system",
@@ -267,6 +279,14 @@ func (d *OpenRouterCryptoProfileDetector) detectOnce(ctx context.Context, body [
 		return nil, fmt.Errorf("openrouter returned status %d", resp.StatusCode)
 	}
 
+	if strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") {
+		content, err := decodeCryptoProfileStreamContent(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return parseOpenRouterCryptoProfilePayload(content)
+	}
+
 	var completion openRouterChatCompletionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&completion); err != nil {
 		return nil, fmt.Errorf("decode openrouter response: %w", err)
@@ -280,6 +300,46 @@ func (d *OpenRouterCryptoProfileDetector) detectOnce(ctx context.Context, body [
 		return nil, fmt.Errorf("openrouter response content is empty")
 	}
 	return parseOpenRouterCryptoProfilePayload(content)
+}
+
+func decodeCryptoProfileStreamContent(r io.Reader) (string, error) {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+	var content strings.Builder
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if payload == "" {
+			continue
+		}
+		if payload == "[DONE]" {
+			break
+		}
+
+		var chunk openRouterChatCompletionChunk
+		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+			continue
+		}
+		for _, choice := range chunk.Choices {
+			if choice.Delta.Content != "" {
+				content.WriteString(choice.Delta.Content)
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("decode openrouter stream: %w", err)
+	}
+
+	trimmed := strings.TrimSpace(content.String())
+	if trimmed == "" {
+		return "", fmt.Errorf("openrouter response content is empty")
+	}
+	return trimmed, nil
 }
 
 func openRouterCryptoProfileJSONSchema() map[string]any {

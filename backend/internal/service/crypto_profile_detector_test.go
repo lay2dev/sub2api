@@ -86,6 +86,7 @@ func TestOpenRouterCryptoProfileDetectorDetect_Match(t *testing.T) {
 	require.Equal(t, "https://sub2api.local", capturedReferer)
 	require.Equal(t, "sub2api-test", capturedTitle)
 	require.Equal(t, "qwen/qwen3.5-122b-a10b", capturedBody["model"])
+	require.Equal(t, true, capturedBody["stream"])
 
 	messages, ok := capturedBody["messages"].([]any)
 	require.True(t, ok)
@@ -95,6 +96,50 @@ func TestOpenRouterCryptoProfileDetectorDetect_Match(t *testing.T) {
 	systemContent, ok := systemMessage["content"].(string)
 	require.True(t, ok)
 	require.Equal(t, expectedPrompt, systemContent)
+}
+
+func TestOpenRouterCryptoProfileDetectorDetect_OpenAICompatibleParsesStreamChunks(t *testing.T) {
+	t.Helper()
+
+	var capturedBody map[string]any
+
+	cfg := &config.Config{
+		Gateway: config.GatewayConfig{
+			CryptoProfileDetection: config.CryptoProfileDetectionConfig{
+				Enabled:        true,
+				Endpoint:       "https://openai-compatible.test/v1/chat/completions",
+				Provider:       "openai_compatible",
+				APIKey:         "oa-key-test",
+				TimeoutSeconds: 3,
+			},
+		},
+	}
+
+	detector := NewOpenRouterCryptoProfileDetector(cfg)
+	detector.httpClient = &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&capturedBody))
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body: io.NopCloser(strings.NewReader(
+					"data: {\"id\":\"resp_1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}\n\n" +
+						"data: {\"id\":\"resp_1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"{\\\"\"},\"finish_reason\":null}]}\n\n" +
+						"data: {\"id\":\"resp_1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"match\"},\"finish_reason\":null}]}\n\n" +
+						"data: {\"id\":\"resp_1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\\\":true,\\\"profile\\\":\\\"crypto-basic\\\"}\"},\"finish_reason\":\"stop\"}]}\n\n" +
+						"data: [DONE]\n\n",
+				)),
+			}, nil
+		}),
+	}
+
+	result, err := detector.Detect(context.Background(), "给出btc价格")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
+	require.Equal(t, "crypto-basic", result.Profile)
+	require.Equal(t, "qwen/qwen3.5-122b-a10b", capturedBody["model"])
+	require.Equal(t, true, capturedBody["stream"])
 }
 
 func TestOpenRouterCryptoProfileDetectorDetect_UsesStructuredOutputsAndRetriesOnInvalidJSON(t *testing.T) {
