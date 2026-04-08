@@ -407,12 +407,45 @@ func (h *OpenAIGatewayHandler) prepareCryptoEnhancedChatRequestBody(
 		}
 
 		h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
-		reqLog.Error("openai_chat_completions.crypto_provider_prepare_failed",
-			zap.Int64("account_id", account.ID),
-			zap.Error(err),
+		reqLog.Warn("openai_chat_completions.crypto_provider_prefetch_fallback",
+			cryptoPrefetchFallbackLogFields(account, err)...,
 		)
 		return nil, nil, true
 	}
+}
+
+func cryptoPrefetchFallbackLogFields(account *service.Account, err error) []zap.Field {
+	fields := []zap.Field{
+		zap.Bool("crypto_prefetch", true),
+		zap.Bool("fallback_to_upstream", true),
+	}
+
+	if account != nil {
+		fields = append(fields,
+			zap.Int64("account_id", account.ID),
+			zap.String("account_name", account.Name),
+			zap.String("platform", account.Platform),
+		)
+		if transport := cryptoPrefetchTransport(account); transport != "" {
+			fields = append(fields, zap.String("prefetch_transport", transport))
+		}
+	}
+
+	if err != nil {
+		fields = append(fields, zap.String("error", err.Error()))
+	}
+
+	return fields
+}
+
+func cryptoPrefetchTransport(account *service.Account) string {
+	if account == nil {
+		return ""
+	}
+	if account.IsOpenAIOAuth() {
+		return "responses"
+	}
+	return "chat_completions"
 }
 
 func (h *OpenAIGatewayHandler) submitOpenAIChatUsageRecord(
