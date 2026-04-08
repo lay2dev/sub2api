@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestOpenAIChatCompletions_SkipsCryptoDetectionWhenBillingFails(t *testing.T) {
@@ -433,6 +434,49 @@ func TestResolveOpenAIForwardDefaultMappedModel(t *testing.T) {
 		require.Empty(t, resolveOpenAIForwardDefaultMappedModel(&service.APIKey{
 			Group: &service.Group{},
 		}, ""))
+	})
+}
+
+func TestCryptoPrefetchFallbackLogFields(t *testing.T) {
+	t.Run("oauth_account_uses_responses_transport", func(t *testing.T) {
+		account := &service.Account{
+			ID:       77,
+			Name:     "crypto-oauth",
+			Platform: service.PlatformOpenAI,
+			Type:     service.AccountTypeOAuth,
+		}
+
+		fields := cryptoPrefetchFallbackLogFields(account, errors.New("prefetch failed"))
+		enc := zapcore.NewMapObjectEncoder()
+		for _, field := range fields {
+			field.AddTo(enc)
+		}
+
+		assert.Equal(t, int64(77), enc.Fields["account_id"])
+		assert.Equal(t, "crypto-oauth", enc.Fields["account_name"])
+		assert.Equal(t, "openai", enc.Fields["platform"])
+		assert.Equal(t, true, enc.Fields["crypto_prefetch"])
+		assert.Equal(t, true, enc.Fields["fallback_to_upstream"])
+		assert.Equal(t, "responses", enc.Fields["prefetch_transport"])
+		assert.Equal(t, "prefetch failed", enc.Fields["error"])
+	})
+
+	t.Run("api_key_account_uses_chat_completions_transport", func(t *testing.T) {
+		account := &service.Account{
+			ID:       88,
+			Name:     "crypto-apikey",
+			Platform: service.PlatformOpenAI,
+			Type:     service.AccountTypeAPIKey,
+		}
+
+		fields := cryptoPrefetchFallbackLogFields(account, errors.New("upstream timeout"))
+		enc := zapcore.NewMapObjectEncoder()
+		for _, field := range fields {
+			field.AddTo(enc)
+		}
+
+		assert.Equal(t, "chat_completions", enc.Fields["prefetch_transport"])
+		assert.Equal(t, "upstream timeout", enc.Fields["error"])
 	})
 }
 
