@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -74,13 +75,17 @@ func detectCryptoProfileMatch(
 		zap.Int("message_chars", len(trimmed)),
 	)
 
+	detectStart := time.Now()
 	result, err := detector.Detect(ctx, trimmed)
+	detectElapsed := time.Since(detectStart)
+
 	if err != nil {
 		reqLog.Warn("gateway.crypto_profile_detection_failed",
 			zap.String("entrypoint", entrypoint),
 			zap.String("original_message", trimmed),
 			zap.Int("message_chars", len(trimmed)),
 			zap.String("error_reason", err.Error()),
+			zap.Duration("elapsed", detectElapsed),
 			zap.Error(err),
 		)
 		return nil
@@ -89,24 +94,33 @@ func detectCryptoProfileMatch(
 		reqLog.Info("gateway.crypto_profile_detection_empty_result",
 			zap.String("entrypoint", entrypoint),
 			zap.Int("message_chars", len(trimmed)),
+			zap.Duration("elapsed", detectElapsed),
 		)
 		return nil
 	}
+
+	logDetectResult := reqLog.Info
+	if detectElapsed >= 50*time.Millisecond {
+		logDetectResult = reqLog.Warn
+	}
+
 	if !result.Matched {
-		reqLog.Info("gateway.crypto_profile_not_matched",
+		logDetectResult("gateway.crypto_profile_not_matched",
 			zap.String("entrypoint", entrypoint),
 			zap.String("crypto_profile", result.Profile),
 			zap.String("detector_model", result.Model),
 			zap.Int("message_chars", len(trimmed)),
+			zap.Duration("elapsed", detectElapsed),
 		)
 		return result
 	}
 
-	reqLog.Info("gateway.crypto_profile_matched",
+	logDetectResult("gateway.crypto_profile_matched",
 		zap.String("entrypoint", entrypoint),
 		zap.String("crypto_profile", result.Profile),
 		zap.String("detector_model", result.Model),
 		zap.Int("message_chars", len(trimmed)),
+		zap.Duration("elapsed", detectElapsed),
 	)
 	return result
 }
