@@ -128,7 +128,9 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		}
 		cryptoPrefetchPrepared = prepared
 		cryptoPrefetchAccount = account
-		forwardBody = prepared.EnhancedBody
+		if prepared != nil {
+			forwardBody = prepared.EnhancedBody
+		}
 	}
 
 	sessionHash := h.gatewayService.GenerateSessionHash(c, body)
@@ -405,12 +407,11 @@ func (h *OpenAIGatewayHandler) prepareCryptoEnhancedChatRequestBody(
 		}
 
 		h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
-		reqLog.Warn("openai_chat_completions.crypto_provider_prepare_failed",
+		reqLog.Error("openai_chat_completions.crypto_provider_prepare_failed",
 			zap.Int64("account_id", account.ID),
 			zap.Error(err),
 		)
-		h.handleStreamingAwareError(c, http.StatusBadGateway, "upstream_error", "Failed to fetch crypto data", *streamStarted)
-		return nil, nil, false
+		return nil, nil, true
 	}
 }
 
