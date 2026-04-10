@@ -51,6 +51,15 @@ func TestOpsSystemLogSink_ShouldIndex(t *testing.T) {
 			want:  true,
 		},
 		{
+			name: "crypto prefetch prepared message",
+			event: &logger.LogEvent{
+				Level:     "info",
+				Component: "handler.openai_gateway.chat_completions",
+				Message:   "openai_chat_completions.crypto_provider_response_prepared",
+			},
+			want: true,
+		},
+		{
 			name: "audit component from fields (real zap path)",
 			event: &logger.LogEvent{
 				Level:     "info",
