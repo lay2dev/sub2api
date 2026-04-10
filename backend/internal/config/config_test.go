@@ -76,6 +76,19 @@ func TestLoadDefaultSchedulingConfig(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultGatewayStreamDataIntervalTimeout(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.Gateway.StreamDataIntervalTimeout != 600 {
+		t.Fatalf("Gateway.StreamDataIntervalTimeout = %d, want 600", cfg.Gateway.StreamDataIntervalTimeout)
+	}
+}
+
 func TestLoadDefaultOpenAIWSConfig(t *testing.T) {
 	resetViperWithJWTSecret(t)
 
@@ -1209,7 +1222,7 @@ func TestValidateConfigErrors(t *testing.T) {
 		},
 		{
 			name:    "gateway stream data interval range",
-			mutate:  func(c *Config) { c.Gateway.StreamDataIntervalTimeout = 5 },
+			mutate:  func(c *Config) { c.Gateway.StreamDataIntervalTimeout = 601 },
 			wantErr: "gateway.stream_data_interval_timeout",
 		},
 		{
@@ -1386,6 +1399,17 @@ func TestValidateConfigErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateConfig_StreamDataIntervalTimeoutAllows600(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+
+	cfg.Gateway.StreamDataIntervalTimeout = 600
+
+	require.NoError(t, cfg.Validate())
 }
 
 func TestValidateConfig_OpenAIWSRules(t *testing.T) {
