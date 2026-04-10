@@ -299,7 +299,9 @@ func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_PrependsCryptoDat
 			"crypto":{
 				"crypto_data":{
 					"intent":"token_analysis",
-					"sources":[{"name":"coinglass","status":"success"}]
+					"sources":[
+						{"name":"coinglass","status":"success","meta":{"adapter_names":["dexscreener","coinglass"]}}
+					]
 				}
 			}
 		}`)),
@@ -380,6 +382,7 @@ func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_PrependsCryptoDat
 	require.Contains(t, injected, `"intent":"token_analysis"`)
 	require.Contains(t, injected, `"name":"coinglass"`)
 	require.NotNil(t, prepared.PrefetchResult)
+	require.Equal(t, []string{"dexscreener", "coinglass"}, prepared.AdapterNames)
 }
 
 func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_ParsesCryptoDataFromStreamPayload(t *testing.T) {
@@ -390,7 +393,7 @@ func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_ParsesCryptoDataF
 		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "X-Request-ID": []string{"rid_crypto_data_stream"}},
 		Body: io.NopCloser(strings.NewReader(
 			"data: {\"id\":\"chatcmpl_crypto_stream_1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"}}]}\n\n" +
-				"data: {\"id\":\"chatcmpl_crypto_stream_1\",\"object\":\"chat.completion\",\"model\":\"gpt-5.2\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":\"stop\"}],\"crypto\":{\"crypto_data\":{\"intent\":\"token_analysis\",\"sources\":[{\"name\":\"coinglass\",\"status\":\"success\"}]}}}\n\n" +
+				"data: {\"id\":\"chatcmpl_crypto_stream_1\",\"object\":\"chat.completion\",\"model\":\"gpt-5.2\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":\"stop\"}],\"crypto\":{\"crypto_data\":{\"intent\":\"token_analysis\",\"sources\":[{\"name\":\"coinglass\",\"status\":\"success\",\"meta\":{\"adapter_names\":[\"coinglass-stream\"]}}]}}}\n\n" +
 				"data: [DONE]\n\n",
 		)),
 	}
@@ -448,6 +451,7 @@ func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_ParsesCryptoDataF
 	require.False(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
 	require.Contains(t, gjson.GetBytes(prepared.EnhancedBody, "messages.0.content").String(), "<crypto_data>")
 	require.Contains(t, gjson.GetBytes(prepared.EnhancedBody, "messages.0.content").String(), `"intent":"token_analysis"`)
+	require.Equal(t, []string{"coinglass-stream"}, prepared.AdapterNames)
 }
 
 func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_UsesAccountDefaultModelWithMinimalCryptoEnvelope(t *testing.T) {

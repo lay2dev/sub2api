@@ -186,3 +186,27 @@ func TestOpenAIHandleFailoverExhausted_LogsCryptoOriginalMessageAndReason(t *tes
 	require.True(t, logSink.ContainsFieldValue("error_reason", "agent upstream overloaded"))
 	require.True(t, logSink.ContainsFieldValue("crypto_profile", "dex-routing"))
 }
+
+func TestLogCryptoPrefetchResponse_LogsAdapterNamesWhenPresent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logSink, restore := captureHandlerStructuredLog(t)
+	defer restore()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+
+	reqLog := requestLogger(c, "handler.openai_gateway.chat_completions")
+	logCryptoPrefetchResponse(reqLog, &service.Account{ID: 42}, &service.OpenAICryptoChatPreparation{
+		AdapterNames: []string{"dexscreener", "coinglass"},
+		PrefetchResult: &service.OpenAIForwardResult{
+			RequestID: "rid_crypto_prefetch",
+		},
+	})
+
+	require.True(t, logSink.ContainsMessageAtLevel("openai_chat_completions.crypto_provider_response_prepared", "info"))
+	require.True(t, logSink.ContainsFieldValue("account_id", "42"))
+	require.True(t, logSink.ContainsFieldValue("upstream_request_id", "rid_crypto_prefetch"))
+	require.True(t, logSink.ContainsFieldValue("crypto_adapter_names", "dexscreener"))
+	require.True(t, logSink.ContainsFieldValue("crypto_adapter_names", "coinglass"))
+}

@@ -38,11 +38,13 @@ const cryptoEnhancedPromptCacheKeyPrefix = "crypto_cc_"
 
 type OpenAICryptoChatPreparation struct {
 	EnhancedBody   []byte
+	AdapterNames   []string
 	PrefetchResult *OpenAIForwardResult
 }
 
 type openAICryptoChatFetchResult struct {
 	CryptoData     json.RawMessage
+	AdapterNames   []string
 	PrefetchResult *OpenAIForwardResult
 }
 
@@ -152,6 +154,7 @@ func (s *OpenAIGatewayService) PrepareCryptoEnhancedChatRequest(
 
 	return &OpenAICryptoChatPreparation{
 		EnhancedBody:   enhancedBody,
+		AdapterNames:   fetchResult.AdapterNames,
 		PrefetchResult: fetchResult.PrefetchResult,
 	}, nil
 }
@@ -310,13 +313,15 @@ func (s *OpenAIGatewayService) fetchCryptoDataForChatCompletions(
 
 	out := make(json.RawMessage, len(cryptoData))
 	copy(out, cryptoData)
+	adapterNames := extractCryptoAdapterNames(out)
 	billingModel := strings.TrimSpace(payload.Model)
 	if billingModel == "" {
 		billingModel = prefetchModel
 	}
 
 	return &openAICryptoChatFetchResult{
-		CryptoData: out,
+		CryptoData:   out,
+		AdapterNames: adapterNames,
 		PrefetchResult: &OpenAIForwardResult{
 			RequestID:     resp.Header.Get("x-request-id"),
 			Usage:         openAIUsageFromChatUsage(payload.Usage),
@@ -408,7 +413,8 @@ func (s *OpenAIGatewayService) fetchCryptoDataViaResponses(
 		billingModel = prefetchModel
 	}
 	return &openAICryptoChatFetchResult{
-		CryptoData: cryptoData,
+		CryptoData:   cryptoData,
+		AdapterNames: extractCryptoAdapterNames(cryptoData),
 		PrefetchResult: &OpenAIForwardResult{
 			RequestID:     resp.Header.Get("x-request-id"),
 			Usage:         usage,
@@ -558,6 +564,37 @@ func extractCryptoDataFromText(text []byte, model string) (json.RawMessage, stri
 	out := make(json.RawMessage, len(cryptoData))
 	copy(out, cryptoData)
 	return out, model, nil
+}
+
+func extractCryptoAdapterNames(cryptoData json.RawMessage) []string {
+	sources := gjson.GetBytes(cryptoData, "sources")
+	if !sources.Exists() || !sources.IsArray() {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	adapterNames := make([]string, 0)
+	for _, source := range sources.Array() {
+		rawNames := source.Get("meta.adapter_names")
+		if !rawNames.Exists() || !rawNames.IsArray() {
+			continue
+		}
+		for _, rawName := range rawNames.Array() {
+			name := strings.TrimSpace(rawName.String())
+			if name == "" {
+				continue
+			}
+			if _, ok := seen[name]; ok {
+				continue
+			}
+			seen[name] = struct{}{}
+			adapterNames = append(adapterNames, name)
+		}
+	}
+	if len(adapterNames) == 0 {
+		return nil
+	}
+	return adapterNames
 }
 
 func normalizeCryptoChatPrefetchResponseBody(headers http.Header, body []byte) ([]byte, error) {

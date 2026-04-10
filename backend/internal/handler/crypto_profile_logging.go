@@ -177,6 +177,31 @@ func cryptoUpstreamFailureLogFields(c *gin.Context, errorReason string) ([]zap.F
 	return fields, len(fields) > 0
 }
 
+func logCryptoPrefetchResponse(
+	reqLog *zap.Logger,
+	account *service.Account,
+	prepared *service.OpenAICryptoChatPreparation,
+) {
+	if reqLog == nil || prepared == nil {
+		return
+	}
+
+	fields := make([]zap.Field, 0, 4)
+	if account != nil {
+		fields = append(fields, zap.Int64("account_id", account.ID))
+	}
+	if prepared.PrefetchResult != nil {
+		if requestID := strings.TrimSpace(prepared.PrefetchResult.RequestID); requestID != "" {
+			fields = append(fields, zap.String("upstream_request_id", requestID))
+		}
+	}
+	if len(prepared.AdapterNames) > 0 {
+		fields = append(fields, zap.Strings("crypto_adapter_names", prepared.AdapterNames))
+	}
+
+	reqLog.Info("openai_chat_completions.crypto_provider_response_prepared", fields...)
+}
+
 func extractCryptoProfileMessageTextFromParsedRequest(parsed *service.ParsedRequest) string {
 	if parsed == nil {
 		return ""
