@@ -82,8 +82,8 @@ var cryptoIntentGuidance = map[string]string{
 // cryptoToolCallDescriptions maps a known tool call name to a short human-readable
 // description of the data it provides. Unknown tool names get a generic fallback.
 var cryptoToolCallDescriptions = map[string]string{
-	"crypto-dex-volume.fetch_snapshot":  "DEX trading volume snapshot across pools",
-	"crypto-dex.fetch_pool_discovery":   "DEX pool discovery: liquidity, TVL, and pool metadata",
+	"crypto-dex-volume.fetch_snapshot": "DEX trading volume snapshot across pools",
+	"crypto-dex.fetch_pool_discovery":  "DEX pool discovery: liquidity, TVL, and pool metadata",
 	"crypto-lp.fetch_positions": "LP positions with tick ranges and liquidity weights. " +
 		"Compute the liquidity-weighted P25–P75 tick distribution, convert to price bounds, " +
 		"and use as the PRIMARY basis for range recommendations. " +
@@ -134,10 +134,14 @@ func resolveOpenAICryptoPrefetchModel(account *Account, requestedModel string) s
 }
 
 func formatCryptoDataSystemMessage(cryptoData json.RawMessage) string {
+	basePrompt := cryptoAnalysisSystemPrompt
+	if basePrompt == "" {
+		basePrompt = "Use the following crypto_data as supplemental context for the user's request."
+	}
+
 	trimmed := bytes.TrimSpace(cryptoData)
 	if len(trimmed) == 0 {
-		return "You have access to live crypto market data fetched for this request.\n\n" +
-			"<crypto_data>\n{}\n</crypto_data>"
+		return basePrompt + "\n\n数据来源摘要：\n- 数据时间：未提供\n- 来源：未提供\n\n附带链上数据（crypto_data JSON）如下：\n<crypto_data>\n{}\n</crypto_data>"
 	}
 
 	var compact bytes.Buffer
@@ -146,20 +150,24 @@ func formatCryptoDataSystemMessage(cryptoData json.RawMessage) string {
 		compact.Write(trimmed)
 	}
 
-	header := buildCryptoDataMessageHeader(trimmed)
-	return header + "<crypto_data>\n" + compact.String() + "\n</crypto_data>"
+	header := buildCryptoDataMessageHeader(trimmed, basePrompt)
+	return header +
+		formatCryptoDataSourceSummary(trimmed) +
+		"\n\n附带链上数据（crypto_data JSON）如下：\n<crypto_data>\n" +
+		compact.String() +
+		"\n</crypto_data>"
 }
 
 // buildCryptoDataMessageHeader returns the prose portion of the system message
-// that appears before the <crypto_data> block. It parses intent and successful
-// sources on a best-effort basis; parse errors produce a minimal generic header.
-func buildCryptoDataMessageHeader(cryptoData []byte) string {
+// that appears before the source summary and <crypto_data> block. It parses
+// intent and successful source metadata on a best-effort basis.
+func buildCryptoDataMessageHeader(cryptoData []byte, basePrompt string) string {
 	var sb strings.Builder
-	sb.WriteString("You have access to live crypto market data fetched for this request.\n\n")
+	sb.WriteString(basePrompt)
+	sb.WriteString("\n\n")
 
 	var hdr cryptoDataHeader
 	if err := json.Unmarshal(cryptoData, &hdr); err != nil {
-		sb.WriteString("Use the following data as supplemental crypto market context.\n\n")
 		return sb.String()
 	}
 
@@ -203,6 +211,55 @@ func buildCryptoDataMessageHeader(cryptoData []byte) string {
 	}
 
 	return sb.String()
+}
+
+func formatCryptoDataSourceSummary(cryptoData []byte) string {
+	lines := []string{"数据来源摘要："}
+
+	timestamp := strings.TrimSpace(gjson.GetBytes(cryptoData, "timestamp").String())
+	if timestamp == "" {
+		lines = append(lines, "- 数据时间：未提供")
+	} else {
+		lines = append(lines, "- 数据时间："+timestamp)
+	}
+
+	sources := gjson.GetBytes(cryptoData, "sources")
+	if !sources.Exists() || !sources.IsArray() || len(sources.Array()) == 0 {
+		lines = append(lines, "- 来源：未提供")
+		return strings.Join(lines, "\n")
+	}
+
+	for _, source := range sources.Array() {
+		name := strings.TrimSpace(source.Get("name").String())
+		if name == "" {
+			name = "unknown"
+		}
+
+		parts := []string{"- 来源：" + name}
+		status := strings.TrimSpace(source.Get("status").String())
+		if status != "" {
+			parts = append(parts, "status="+status)
+		}
+
+		rawAdapterNames := source.Get("meta.adapter_names")
+		if rawAdapterNames.Exists() && rawAdapterNames.IsArray() {
+			adapterNames := make([]string, 0, len(rawAdapterNames.Array()))
+			for _, rawName := range rawAdapterNames.Array() {
+				name := strings.TrimSpace(rawName.String())
+				if name == "" {
+					continue
+				}
+				adapterNames = append(adapterNames, name)
+			}
+			if len(adapterNames) > 0 {
+				parts = append(parts, "adapter_names="+strings.Join(adapterNames, "/"))
+			}
+		}
+
+		lines = append(lines, strings.Join(parts, "；"))
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 func injectCryptoDataSystemMessage(body []byte, cryptoData json.RawMessage) ([]byte, error) {
@@ -784,6 +841,10 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (*OpenAIForwardResult, error) {
+	if account != nil && account.IsOpenAIApiKey() && (account.IsOpenAIPassthroughEnabled() || strings.TrimSpace(account.GetOpenAIBaseURL()) != "") {
+		return s.ForwardChatCompletionsPassthrough(ctx, c, account, body, defaultMappedModel)
+	}
+
 	startTime := time.Now()
 
 	// 1. Parse Chat Completions request
@@ -1292,13 +1353,6 @@ func (s *OpenAIGatewayService) ForwardChatCompletionsPassthrough(
 			return nil, fmt.Errorf("set mapped model: %w", err)
 		}
 	}
-	if reqStream {
-		forwardBody, err = sjson.SetBytes(forwardBody, "stream", false)
-		if err != nil {
-			return nil, fmt.Errorf("disable upstream stream: %w", err)
-		}
-	}
-
 	token := ""
 	requiresAuth := true
 	if account.IsOpenAICryptoRouter() && account.IsOpenAIApiKey() && strings.TrimSpace(account.GetOpenAIApiKey()) == "" {
@@ -1380,7 +1434,7 @@ func (s *OpenAIGatewayService) ForwardChatCompletionsPassthrough(
 		return s.handleChatCompletionsErrorResponse(resp, c, account)
 	}
 
-	return s.handleChatCompletionsPassthroughSuccess(ctx, resp, c, reqModel, mappedModel, reqStream, includeUsage, startTime)
+	return s.handleChatCompletionsPassthroughSuccess(ctx, resp, c, account, reqModel, mappedModel, reqStream, includeUsage, startTime)
 }
 
 func (s *OpenAIGatewayService) buildChatCompletionsPassthroughRequest(
@@ -1435,12 +1489,38 @@ func (s *OpenAIGatewayService) handleChatCompletionsPassthroughSuccess(
 	ctx context.Context,
 	resp *http.Response,
 	c *gin.Context,
+	account *Account,
 	originalModel string,
 	mappedModel string,
 	clientStream bool,
 	includeUsage bool,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
+	if clientStream && isEventStreamResponse(resp.Header) {
+		streamResult, err := s.handleStreamingResponse(ctx, resp, c, account, startTime, originalModel, mappedModel)
+		if err != nil {
+			return nil, err
+		}
+		usage := OpenAIUsage{}
+		if streamResult != nil && streamResult.usage != nil {
+			usage = *streamResult.usage
+		}
+		var firstTokenMs *int
+		if streamResult != nil {
+			firstTokenMs = streamResult.firstTokenMs
+		}
+		return &OpenAIForwardResult{
+			RequestID:     resp.Header.Get("x-request-id"),
+			Usage:         usage,
+			Model:         originalModel,
+			UpstreamModel: mappedModel,
+			Stream:        true,
+			OpenAIWSMode:  false,
+			Duration:      time.Since(startTime),
+			FirstTokenMs:  firstTokenMs,
+		}, nil
+	}
+
 	maxBytes := resolveUpstreamResponseReadLimit(s.cfg)
 	body, err := readUpstreamResponseBodyLimited(resp.Body, maxBytes)
 	if err != nil {

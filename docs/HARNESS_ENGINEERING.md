@@ -69,6 +69,7 @@ They should not silently redefine core product behavior that belongs in the base
 Treat these files as code:
 - `backend/internal/pkg/openai/instructions.txt`
 - `backend/internal/service/prompts/codex_opencode_bridge.txt`
+- `backend/internal/service/prompts/crypto_analysis_system_prompt.txt`
 - any future harness prompt assets
 
 Required discipline:
@@ -111,6 +112,14 @@ Use this order conceptually:
 2. provider-family base instructions
 3. runtime bridge prompt
 4. per-request dynamic context
+
+For crypto-enhanced OpenAI chat requests, the per-request dynamic context currently includes:
+- `backend/internal/service/prompts/crypto_analysis_system_prompt.txt`
+- inline `<crypto_data>...</crypto_data>` payload assembled in `backend/internal/service/openai_gateway_chat_completions.go`
+
+The crypto analysis prompt is expected to steer the model toward a fixed report-style layout
+including overview, Top 10 holdings/NFT/DeFi sections, recent transactions, risk tables, and
+actionable conclusions, while still grounding every claim in the injected `crypto_data`.
 
 Avoid hidden prompt concatenation logic spread across unrelated packages.
 
