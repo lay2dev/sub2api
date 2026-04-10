@@ -9,6 +9,22 @@ const getExtraString = (extra: Record<string, any> | undefined, key: string) => 
   return ''
 }
 
+const getExtraStringList = (extra: Record<string, any> | undefined, key: string) => {
+  if (!extra) return ''
+  const v = extra[key]
+  if (!Array.isArray(v)) return ''
+
+  const items = v
+    .map((item) => {
+      if (typeof item === 'string') return item.trim()
+      if (typeof item === 'number' || typeof item === 'boolean') return String(item)
+      return ''
+    })
+    .filter(Boolean)
+
+  return items.join(',')
+}
+
 export const buildSystemLogDetail = (row: OpsSystemLog) => {
   const parts: string[] = []
   const msg = String(row.message || '').trim()
@@ -43,13 +59,17 @@ export const buildSystemLogDetail = (row: OpsSystemLog) => {
   const cryptoPrefetch = getExtraString(extra, 'crypto_prefetch')
   const fallbackToUpstream = getExtraString(extra, 'fallback_to_upstream')
   const prefetchTransport = getExtraString(extra, 'prefetch_transport')
+  const upstreamRequestID = getExtraString(extra, 'upstream_request_id')
   const accountName = getExtraString(extra, 'account_name')
+  const cryptoAdapterNames = getExtraStringList(extra, 'crypto_adapter_names')
 
   const cryptoParts: string[] = []
   if (cryptoPrefetch) cryptoParts.push(`crypto_prefetch=${cryptoPrefetch}`)
   if (fallbackToUpstream) cryptoParts.push(`fallback_to_upstream=${fallbackToUpstream}`)
   if (prefetchTransport) cryptoParts.push(`prefetch_transport=${prefetchTransport}`)
+  if (upstreamRequestID) cryptoParts.push(`upstream_request_id=${upstreamRequestID}`)
   if (accountName) cryptoParts.push(`account_name=${accountName}`)
+  if (cryptoAdapterNames) cryptoParts.push(`crypto_adapter_names=${cryptoAdapterNames}`)
   if (cryptoParts.length > 0) parts.push(cryptoParts.join(' '))
 
   const errors = getExtraString(extra, 'errors')
