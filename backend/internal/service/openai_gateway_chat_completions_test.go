@@ -609,10 +609,10 @@ func TestFormatCryptoDataSystemMessage_KnownIntentAndSources(t *testing.T) {
 	msg := formatCryptoDataSystemMessage(raw)
 
 	require.Contains(t, msg, "You have access to live crypto market data fetched for this request.")
-	require.Contains(t, msg, "Uniswap liquidity pool")
+	require.Contains(t, msg, "liquidity-weighted tick distribution")
 	require.Contains(t, msg, "Available data sources:")
 	require.Contains(t, msg, "crypto-dex.fetch_pool_discovery (geckoterminal): DEX pool discovery")
-	require.Contains(t, msg, "crypto-lp.fetch_positions (revert): LP position details")
+	require.Contains(t, msg, "crypto-lp.fetch_positions (revert): LP positions with tick ranges")
 	require.Contains(t, msg, "<crypto_data>")
 	require.Contains(t, msg, `"intent":"uniswap"`)
 	require.Contains(t, msg, "</crypto_data>")

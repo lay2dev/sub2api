@@ -1,0 +1,394 @@
+From 716ced04d3afb83b4be26a7fd677e457b06a4e80 Mon Sep 17 00:00:00 2001
+From: zzhengzhuo015 <zhengzhuo015@gmail.com>
+Date: Fri, 10 Apr 2026 18:03:40 +0800
+Subject: [PATCH 1/2] feat: generate intent-aware system message for crypto
+ data
+
+Replace the generic "supplemental context" prompt with a structured header
+that tells the main LLM what type of analysis to perform (based on intent)
+and annotates each data source with a human-readable description of what
+it provides (based on tool call name and adapter name).
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .../openai_gateway_chat_completions.go        | 102 +++++++++++-
+ .../openai_gateway_chat_completions_test.go   | 154 ++++++++++++++++++
+ 2 files changed, 252 insertions(+), 4 deletions(-)
+
+diff --git a/backend/internal/service/openai_gateway_chat_completions.go b/backend/internal/service/openai_gateway_chat_completions.go
+index d992ee85..27bb814e 100644
+--- a/backend/internal/service/openai_gateway_chat_completions.go
++++ b/backend/internal/service/openai_gateway_chat_completions.go
+@@ -50,6 +50,44 @@ type openAICryptoChatFetchResult struct {
+ 	PrefetchResult *OpenAIForwardResult
+ }
+ 
++// cryptoDataHeader is a minimal parse of the crypto_data JSON used to build
++// the structured system message header. Only intent and source metadata are
++// needed; the full data blob is still forwarded verbatim to the LLM.
++type cryptoDataHeader struct {
++	Intent  string `json:"intent"`
++	Sources []struct {
++		Status string `json:"status"`
++		Meta   struct {
++			AdapterNames []string `json:"adapter_names"`
++			ToolCalls    []string `json:"tool_calls"`
++		} `json:"meta"`
++	} `json:"sources"`
++}
++
++// cryptoIntentGuidance maps the intent field from crypto_data to a focused
++// instruction telling the LLM what type of analysis to perform.
++var cryptoIntentGuidance = map[string]string{
++	"uniswap":        "Focus on Uniswap liquidity pool metrics, LP position performance, fee tiers, and range setting for concentrated liquidity.",
++	"token-research": "Focus on token fundamentals: team background, vesting schedules, unlock events, on-chain holder distribution, and narrative strength.",
++	"crypto-basic":   "Focus on market price action, on-chain activity, whale movements, funding rates, and macro sentiment signals.",
++	"defi-lending":   "Focus on lending protocol health: collateral ratios, liquidation risk, interest rate comparisons, and utilization rates.",
++	"dex-routing":    "Focus on optimal swap routing across DEXes: price impact, slippage, gas cost, and route path efficiency.",
++	"token_analysis": "Focus on token-level analysis including price trends, volume, market cap, and on-chain signals.",
++}
++
++// cryptoToolCallDescriptions maps a known tool call name to a short human-readable
++// description of the data it provides. Unknown tool names get a generic fallback.
++var cryptoToolCallDescriptions = map[string]string{
++	"crypto-dex-volume.fetch_snapshot":  "DEX trading volume snapshot across pools",
++	"crypto-dex.fetch_pool_discovery":   "DEX pool discovery: liquidity, TVL, and pool metadata",
++	"crypto-lp.fetch_positions":         "LP position details: current value, fees earned, and range status",
++	"crypto-yield.fetch_snapshot":       "Yield farming and liquidity mining rates",
++	"crypto-prediction.fetch_consensus": "Analyst price predictions and consensus targets",
++	"crypto-market.fetch_price":         "Live token price, volume, and market cap data",
++	"crypto-news.fetch_newsflash":       "Recent crypto news headlines and sentiment signals",
++	"crypto-research.search_web":        "Web search results for token research and background information",
++}
++
+ func deriveCryptoEnhancedPromptCacheKey(originalPromptCacheKey string, enhancedBody []byte) string {
+ 	seed := strings.TrimSpace(originalPromptCacheKey)
+ 	if seed == "" {
+@@ -91,17 +129,73 @@ func resolveOpenAICryptoPrefetchModel(account *Account, requestedModel string) s
+ func formatCryptoDataSystemMessage(cryptoData json.RawMessage) string {
+ 	trimmed := bytes.TrimSpace(cryptoData)
+ 	if len(trimmed) == 0 {
+-		return "Use the following crypto_data as supplemental context for the user's request.\n<crypto_data>\n{}\n</crypto_data>"
++		return "You have access to live crypto market data fetched for this request.\n\n" +
++			"<crypto_data>\n{}\n</crypto_data>"
+ 	}
+ 
+ 	var compact bytes.Buffer
+ 	if err := json.Compact(&compact, trimmed); err != nil {
++		compact.Reset()
+ 		compact.Write(trimmed)
+ 	}
+ 
+-	return "Use the following crypto_data as supplemental context for the user's request.\n<crypto_data>\n" +
+-		compact.String() +
+-		"\n</crypto_data>"
++	header := buildCryptoDataMessageHeader(trimmed)
++	return header + "<crypto_data>\n" + compact.String() + "\n</crypto_data>"
++}
++
++// buildCryptoDataMessageHeader returns the prose portion of the system message
++// that appears before the <crypto_data> block. It parses intent and successful
++// sources on a best-effort basis; parse errors produce a minimal generic header.
++func buildCryptoDataMessageHeader(cryptoData []byte) string {
++	var sb strings.Builder
++	sb.WriteString("You have access to live crypto market data fetched for this request.\n\n")
++
++	var hdr cryptoDataHeader
++	if err := json.Unmarshal(cryptoData, &hdr); err != nil {
++		sb.WriteString("Use the following data as supplemental crypto market context.\n\n")
++		return sb.String()
++	}
++
++	if guidance, ok := cryptoIntentGuidance[strings.TrimSpace(hdr.Intent)]; ok {
++		sb.WriteString(guidance)
++		sb.WriteByte('\n')
++	}
++
++	type sourceEntry struct{ toolCall, adapterName string }
++	var entries []sourceEntry
++	for _, src := range hdr.Sources {
++		if !strings.EqualFold(strings.TrimSpace(src.Status), "success") {
++			continue
++		}
++		adapterName := ""
++		if len(src.Meta.AdapterNames) > 0 {
++			adapterName = strings.TrimSpace(src.Meta.AdapterNames[0])
++		}
++		for _, tc := range src.Meta.ToolCalls {
++			tc = strings.TrimSpace(tc)
++			if tc != "" {
++				entries = append(entries, sourceEntry{toolCall: tc, adapterName: adapterName})
++			}
++		}
++	}
++
++	if len(entries) > 0 {
++		sb.WriteString("\nAvailable data sources:\n")
++		for _, e := range entries {
++			desc := cryptoToolCallDescriptions[e.toolCall]
++			if desc == "" {
++				desc = "live crypto data"
++			}
++			if e.adapterName != "" {
++				sb.WriteString("- " + e.toolCall + " (" + e.adapterName + "): " + desc + "\n")
++			} else {
++				sb.WriteString("- " + e.toolCall + ": " + desc + "\n")
++			}
++		}
++		sb.WriteByte('\n')
++	}
++
++	return sb.String()
+ }
+ 
+ func injectCryptoDataSystemMessage(body []byte, cryptoData json.RawMessage) ([]byte, error) {
+diff --git a/backend/internal/service/openai_gateway_chat_completions_test.go b/backend/internal/service/openai_gateway_chat_completions_test.go
+index f8b210e2..a20890d2 100644
+--- a/backend/internal/service/openai_gateway_chat_completions_test.go
++++ b/backend/internal/service/openai_gateway_chat_completions_test.go
+@@ -2,6 +2,7 @@ package service
+ 
+ import (
+ 	"context"
++	"encoding/json"
+ 	"io"
+ 	"net/http"
+ 	"net/http/httptest"
+@@ -381,6 +382,9 @@ func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_PrependsCryptoDat
+ 	require.Contains(t, injected, "<crypto_data>")
+ 	require.Contains(t, injected, `"intent":"token_analysis"`)
+ 	require.Contains(t, injected, `"name":"coinglass"`)
++	require.Contains(t, injected, "You have access to live crypto market data fetched for this request.")
++	require.Contains(t, injected, "Available data sources:")
++	require.Contains(t, injected, "crypto-market.fetch_price (dexscreener)")
+ 	require.NotNil(t, prepared.PrefetchResult)
+ 	require.Equal(t, []string{"dexscreener", "coinglass"}, prepared.AdapterNames)
+ 	require.Len(t, prepared.ToolCalls, 1)
+@@ -578,3 +582,153 @@ func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_ErrorsWhenCryptoD
+ 	require.Error(t, err)
+ 	require.Contains(t, err.Error(), "crypto.crypto_data")
+ }
++
++func TestFormatCryptoDataSystemMessage_KnownIntentAndSources(t *testing.T) {
++	raw := json.RawMessage(`{
++		"intent": "uniswap",
++		"sources": [
++			{
++				"name": "pool_data",
++				"status": "success",
++				"meta": {
++					"adapter_names": ["geckoterminal"],
++					"tool_calls": ["crypto-dex.fetch_pool_discovery"]
++				}
++			},
++			{
++				"name": "lp_data",
++				"status": "success",
++				"meta": {
++					"adapter_names": ["revert"],
++					"tool_calls": ["crypto-lp.fetch_positions"]
++				}
++			}
++		]
++	}`)
++
++	msg := formatCryptoDataSystemMessage(raw)
++
++	require.Contains(t, msg, "You have access to live crypto market data fetched for this request.")
++	require.Contains(t, msg, "Uniswap liquidity pool")
++	require.Contains(t, msg, "Available data sources:")
++	require.Contains(t, msg, "crypto-dex.fetch_pool_discovery (geckoterminal): DEX pool discovery")
++	require.Contains(t, msg, "crypto-lp.fetch_positions (revert): LP position details")
++	require.Contains(t, msg, "<crypto_data>")
++	require.Contains(t, msg, `"intent":"uniswap"`)
++	require.Contains(t, msg, "</crypto_data>")
++
++	// Header must appear before the data block
++	require.Less(t, strings.Index(msg, "Available data sources:"), strings.Index(msg, "<crypto_data>"))
++}
++
++func TestFormatCryptoDataSystemMessage_UnknownIntentFallsBack(t *testing.T) {
++	raw := json.RawMessage(`{
++		"intent": "some-future-intent",
++		"sources": [
++			{
++				"status": "success",
++				"meta": {
++					"adapter_names": ["foo"],
++					"tool_calls": ["crypto-market.fetch_price"]
++				}
++			}
++		]
++	}`)
++
++	msg := formatCryptoDataSystemMessage(raw)
++
++	require.Contains(t, msg, "You have access to live crypto market data fetched for this request.")
++	require.Contains(t, msg, "Available data sources:")
++	require.Contains(t, msg, "crypto-market.fetch_price (foo)")
++	require.Contains(t, msg, "<crypto_data>")
++	// No intent guidance for unknown intent
++	require.NotContains(t, msg, "Focus on")
++}
++
++func TestFormatCryptoDataSystemMessage_UnknownToolCallGetsGenericDescription(t *testing.T) {
++	raw := json.RawMessage(`{
++		"intent": "crypto-basic",
++		"sources": [
++			{
++				"status": "success",
++				"meta": {
++					"adapter_names": ["new-adapter"],
++					"tool_calls": ["crypto-future.fetch_something_new"]
++				}
++			}
++		]
++	}`)
++
++	msg := formatCryptoDataSystemMessage(raw)
++
++	require.Contains(t, msg, "crypto-future.fetch_something_new (new-adapter): live crypto data")
++}
++
++func TestFormatCryptoDataSystemMessage_FailedSourcesExcluded(t *testing.T) {
++	raw := json.RawMessage(`{
++		"intent": "defi-lending",
++		"sources": [
++			{
++				"status": "success",
++				"meta": {
++					"adapter_names": ["aave"],
++					"tool_calls": ["crypto-yield.fetch_snapshot"]
++				}
++			},
++			{
++				"status": "error",
++				"meta": {
++					"adapter_names": ["compound"],
++					"tool_calls": ["crypto-dex-volume.fetch_snapshot"]
++				}
++			}
++		]
++	}`)
++
++	msg := formatCryptoDataSystemMessage(raw)
++
++	// Only the header portion should be checked; the raw JSON blob always contains all sources.
++	header := msg[:strings.Index(msg, "<crypto_data>")]
++	require.Contains(t, header, "crypto-yield.fetch_snapshot")
++	require.NotContains(t, header, "crypto-dex-volume.fetch_snapshot")
++}
++
++func TestFormatCryptoDataSystemMessage_IntentOnlyNoSources(t *testing.T) {
++	raw := json.RawMessage(`{"intent":"token_analysis"}`)
++
++	msg := formatCryptoDataSystemMessage(raw)
++
++	require.Contains(t, msg, "You have access to live crypto market data fetched for this request.")
++	require.Contains(t, msg, "token-level analysis")
++	require.NotContains(t, msg, "Available data sources:")
++	require.Contains(t, msg, "<crypto_data>")
++	require.Contains(t, msg, `"intent":"token_analysis"`)
++}
++
++func TestFormatCryptoDataSystemMessage_EmptyData(t *testing.T) {
++	msg := formatCryptoDataSystemMessage(json.RawMessage(nil))
++
++	require.Contains(t, msg, "You have access to live crypto market data fetched for this request.")
++	require.Contains(t, msg, "<crypto_data>")
++	require.Contains(t, msg, "{}")
++}
++
++func TestFormatCryptoDataSystemMessage_SourceWithNoAdapterName(t *testing.T) {
++	raw := json.RawMessage(`{
++		"intent": "crypto-basic",
++		"sources": [
++			{
++				"status": "success",
++				"meta": {
++					"adapter_names": [],
++					"tool_calls": ["crypto-news.fetch_newsflash"]
++				}
++			}
++		]
++	}`)
++
++	msg := formatCryptoDataSystemMessage(raw)
++
++	require.Contains(t, msg, "- crypto-news.fetch_newsflash: Recent crypto news")
++	require.NotContains(t, msg, "crypto-news.fetch_newsflash ()")
++}
+-- 
+2.43.0
+
+
+From acbf7c51178fbf299e0bcc0980309a38de1054c3 Mon Sep 17 00:00:00 2001
+From: zzhengzhuo015 <zhengzhuo015@gmail.com>
+Date: Fri, 10 Apr 2026 18:39:08 +0800
+Subject: [PATCH 2/2] feat: prioritize revert tick distribution over OHLCV for
+ LP range recommendations
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Update uniswap intent guidance to explicitly prioritize crypto-lp.fetch_positions
+  tick data (P25–P75 liquidity-weighted distribution) as primary range source
+- Only fall back to OHLCV-based volatility analysis when position data is missing
+- Update crypto-lp.fetch_positions tool description to reinforce the priority order
+- Update test assertions to match new description text
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .../service/openai_gateway_chat_completions.go        | 11 +++++++++--
+ .../service/openai_gateway_chat_completions_test.go   |  4 ++--
+ 2 files changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/backend/internal/service/openai_gateway_chat_completions.go b/backend/internal/service/openai_gateway_chat_completions.go
+index 27bb814e..24a809f9 100644
+--- a/backend/internal/service/openai_gateway_chat_completions.go
++++ b/backend/internal/service/openai_gateway_chat_completions.go
+@@ -67,7 +67,11 @@ type cryptoDataHeader struct {
+ // cryptoIntentGuidance maps the intent field from crypto_data to a focused
+ // instruction telling the LLM what type of analysis to perform.
+ var cryptoIntentGuidance = map[string]string{
+-	"uniswap":        "Focus on Uniswap liquidity pool metrics, LP position performance, fee tiers, and range setting for concentrated liquidity.",
++	"uniswap": "Focus on Uniswap liquidity pool metrics, LP position performance, fee tiers, and range setting for concentrated liquidity. " +
++		"For range recommendations, follow this priority order: " +
++		"(1) If crypto-lp.fetch_positions data is available, derive the range from the liquidity-weighted tick distribution of existing positions — " +
++		"compute where liquidity is most concentrated, identify the P25–P75 tick range, and convert ticks to price bounds as the primary recommendation. " +
++		"(2) Only fall back to OHLCV-based volatility analysis when position data is missing or insufficient to determine a meaningful distribution.",
+ 	"token-research": "Focus on token fundamentals: team background, vesting schedules, unlock events, on-chain holder distribution, and narrative strength.",
+ 	"crypto-basic":   "Focus on market price action, on-chain activity, whale movements, funding rates, and macro sentiment signals.",
+ 	"defi-lending":   "Focus on lending protocol health: collateral ratios, liquidation risk, interest rate comparisons, and utilization rates.",
+@@ -80,7 +84,10 @@ var cryptoIntentGuidance = map[string]string{
+ var cryptoToolCallDescriptions = map[string]string{
+ 	"crypto-dex-volume.fetch_snapshot":  "DEX trading volume snapshot across pools",
+ 	"crypto-dex.fetch_pool_discovery":   "DEX pool discovery: liquidity, TVL, and pool metadata",
+-	"crypto-lp.fetch_positions":         "LP position details: current value, fees earned, and range status",
++	"crypto-lp.fetch_positions": "LP positions with tick ranges and liquidity weights. " +
++		"Compute the liquidity-weighted P25–P75 tick distribution, convert to price bounds, " +
++		"and use as the PRIMARY basis for range recommendations. " +
++		"Only use OHLCV volatility as a fallback when this data is missing or insufficient.",
+ 	"crypto-yield.fetch_snapshot":       "Yield farming and liquidity mining rates",
+ 	"crypto-prediction.fetch_consensus": "Analyst price predictions and consensus targets",
+ 	"crypto-market.fetch_price":         "Live token price, volume, and market cap data",
+diff --git a/backend/internal/service/openai_gateway_chat_completions_test.go b/backend/internal/service/openai_gateway_chat_completions_test.go
+index a20890d2..8e13074e 100644
+--- a/backend/internal/service/openai_gateway_chat_completions_test.go
++++ b/backend/internal/service/openai_gateway_chat_completions_test.go
+@@ -609,10 +609,10 @@ func TestFormatCryptoDataSystemMessage_KnownIntentAndSources(t *testing.T) {
+ 	msg := formatCryptoDataSystemMessage(raw)
+ 
+ 	require.Contains(t, msg, "You have access to live crypto market data fetched for this request.")
+-	require.Contains(t, msg, "Uniswap liquidity pool")
++	require.Contains(t, msg, "liquidity-weighted tick distribution")
+ 	require.Contains(t, msg, "Available data sources:")
+ 	require.Contains(t, msg, "crypto-dex.fetch_pool_discovery (geckoterminal): DEX pool discovery")
+-	require.Contains(t, msg, "crypto-lp.fetch_positions (revert): LP position details")
++	require.Contains(t, msg, "crypto-lp.fetch_positions (revert): LP positions with tick ranges")
+ 	require.Contains(t, msg, "<crypto_data>")
+ 	require.Contains(t, msg, `"intent":"uniswap"`)
+ 	require.Contains(t, msg, "</crypto_data>")
+-- 
+2.43.0
+

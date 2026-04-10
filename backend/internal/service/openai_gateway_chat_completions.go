@@ -67,7 +67,11 @@ type cryptoDataHeader struct {
 // cryptoIntentGuidance maps the intent field from crypto_data to a focused
 // instruction telling the LLM what type of analysis to perform.
 var cryptoIntentGuidance = map[string]string{
-	"uniswap":        "Focus on Uniswap liquidity pool metrics, LP position performance, fee tiers, and range setting for concentrated liquidity.",
+	"uniswap": "Focus on Uniswap liquidity pool metrics, LP position performance, fee tiers, and range setting for concentrated liquidity. " +
+		"For range recommendations, follow this priority order: " +
+		"(1) If crypto-lp.fetch_positions data is available, derive the range from the liquidity-weighted tick distribution of existing positions — " +
+		"compute where liquidity is most concentrated, identify the P25–P75 tick range, and convert ticks to price bounds as the primary recommendation. " +
+		"(2) Only fall back to OHLCV-based volatility analysis when position data is missing or insufficient to determine a meaningful distribution.",
 	"token-research": "Focus on token fundamentals: team background, vesting schedules, unlock events, on-chain holder distribution, and narrative strength.",
 	"crypto-basic":   "Focus on market price action, on-chain activity, whale movements, funding rates, and macro sentiment signals.",
 	"defi-lending":   "Focus on lending protocol health: collateral ratios, liquidation risk, interest rate comparisons, and utilization rates.",
@@ -80,7 +84,10 @@ var cryptoIntentGuidance = map[string]string{
 var cryptoToolCallDescriptions = map[string]string{
 	"crypto-dex-volume.fetch_snapshot":  "DEX trading volume snapshot across pools",
 	"crypto-dex.fetch_pool_discovery":   "DEX pool discovery: liquidity, TVL, and pool metadata",
-	"crypto-lp.fetch_positions":         "LP position details: current value, fees earned, and range status",
+	"crypto-lp.fetch_positions": "LP positions with tick ranges and liquidity weights. " +
+		"Compute the liquidity-weighted P25–P75 tick distribution, convert to price bounds, " +
+		"and use as the PRIMARY basis for range recommendations. " +
+		"Only use OHLCV volatility as a fallback when this data is missing or insufficient.",
 	"crypto-yield.fetch_snapshot":       "Yield farming and liquidity mining rates",
 	"crypto-prediction.fetch_consensus": "Analyst price predictions and consensus targets",
 	"crypto-market.fetch_price":         "Live token price, volume, and market cap data",
