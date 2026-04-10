@@ -365,6 +365,7 @@ func (h *OpenAIGatewayHandler) prepareCryptoEnhancedChatRequestBody(
 		}
 		if err == nil {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, nil)
+			logCryptoPrefetchResponse(reqLog, account, prepared)
 			return prepared, account, true
 		}
 
