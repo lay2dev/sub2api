@@ -196,8 +196,68 @@ func TestOpenAIGatewayService_ForwardChatCompletionsPassthrough_StreamWrapsProvi
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.True(t, result.Stream)
-	require.False(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
+	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
 	require.Contains(t, rec.Body.String(), `"object":"chat.completion.chunk"`)
+	require.Contains(t, rec.Body.String(), "data: [DONE]")
+}
+
+func TestOpenAIGatewayService_ForwardChatCompletionsPassthrough_StreamPassesThroughProviderSSE(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_chat_provider_sse"}},
+		Body: io.NopCloser(strings.NewReader(
+			"data: {\"id\":\"chatcmpl_provider_sse_1\",\"object\":\"chat.completion.chunk\",\"created\":1775809020,\"model\":\"gpt-5.4\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hello\"},\"finish_reason\":null}]}\n\n" +
+				"data: {\"id\":\"chatcmpl_provider_sse_1\",\"object\":\"chat.completion.chunk\",\"created\":1775809020,\"model\":\"gpt-5.4\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7,\"total_tokens\":18}}\n\n" +
+				"data: [DONE]\n\n",
+		)),
+	}
+	upstream := &httpUpstreamRecorder{resp: resp}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gpt-5.4","stream":true,"stream_options":{"include_usage":true},"messages":[{"role":"user","content":"btc"}]}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{
+			Security: config.SecurityConfig{
+				URLAllowlist: config.URLAllowlistConfig{
+					Enabled:           false,
+					AllowInsecureHTTP: true,
+				},
+			},
+		},
+		httpUpstream: upstream,
+	}
+	account := &Account{
+		ID:          77010,
+		Name:        "owlia-chat-provider-sse",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"api_key":  "sk-provider",
+			"base_url": "https://llm2api.owlia.ai",
+		},
+	}
+
+	result, err := svc.ForwardChatCompletionsPassthrough(
+		context.Background(),
+		c,
+		account,
+		[]byte(`{"model":"gpt-5.4","stream":true,"stream_options":{"include_usage":true},"messages":[{"role":"user","content":"btc"}]}`),
+		"",
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Stream)
+	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
+	require.Contains(t, rec.Body.String(), `"content":"hello"`)
+	require.Contains(t, rec.Body.String(), `"total_tokens":18`)
 	require.Contains(t, rec.Body.String(), "data: [DONE]")
 }
 
@@ -260,6 +320,70 @@ func TestOpenAIGatewayService_ForwardChatCompletionsPassthrough_CryptoRouterAllo
 	require.Empty(t, upstream.lastReq.Header.Get("Authorization"))
 }
 
+func TestOpenAIGatewayService_ForwardAsChatCompletions_UsesPassthroughForAPIKeyPassthroughAccount(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"rid_chat_provider_passthrough"}},
+		Body: io.NopCloser(strings.NewReader(`{
+			"id":"chatcmpl_provider_passthrough_1",
+			"object":"chat.completion",
+			"model":"gpt-5.4",
+			"choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],
+			"usage":{"prompt_tokens":12,"completion_tokens":4,"total_tokens":16}
+		}`)),
+	}
+	upstream := &httpUpstreamRecorder{resp: resp}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gpt-5.4","messages":[{"role":"user","content":"ping"}]}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{
+			Security: config.SecurityConfig{
+				URLAllowlist: config.URLAllowlistConfig{
+					Enabled:           false,
+					AllowInsecureHTTP: true,
+				},
+			},
+		},
+		httpUpstream: upstream,
+	}
+	account := &Account{
+		ID:          77009,
+		Name:        "owlia-chat-passthrough",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"api_key":  "sk-provider",
+			"base_url": "https://llm2api.owlia.ai",
+		},
+		Extra: map[string]any{
+			"openai_passthrough": true,
+		},
+	}
+
+	result, err := svc.ForwardAsChatCompletions(
+		context.Background(),
+		c,
+		account,
+		[]byte(`{"model":"gpt-5.4","messages":[{"role":"user","content":"ping"}]}`),
+		"",
+		"",
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, upstream.lastReq)
+	require.Equal(t, "https://llm2api.owlia.ai/v1/chat/completions", upstream.lastReq.URL.String())
+	require.Equal(t, "Bearer sk-provider", upstream.lastReq.Header.Get("Authorization"))
+}
+
 func TestDeriveCryptoEnhancedPromptCacheKey_ChangesWhenEnhancedBodyChanges(t *testing.T) {
 	first := deriveCryptoEnhancedPromptCacheKey(
 		"prompt-cache-seed",
@@ -288,6 +412,47 @@ func TestResolveOpenAICryptoPrefetchModel_PrefersProviderOwnedDefaultModel(t *te
 
 	got := resolveOpenAICryptoPrefetchModel(account, "gpt-5.2")
 	require.Equal(t, "owlia-crypto-default", got)
+}
+
+func TestFormatCryptoDataSystemMessage_IncludesCryptoAnalystPrompt(t *testing.T) {
+	formatted := formatCryptoDataSystemMessage(json.RawMessage(`{"intent":"token_analysis"}`))
+
+	require.Contains(t, formatted, "你是一个加密货币链上数据分析师")
+	require.Contains(t, formatted, "输出结构化的中文 Markdown 分析报告")
+	require.Contains(t, formatted, "总体投资组合概览")
+	require.Contains(t, formatted, "Top 10 代币持仓")
+	require.Contains(t, formatted, "Top 10 NFT 持仓")
+	require.Contains(t, formatted, "Top 10 DeFi 仓位")
+	require.Contains(t, formatted, "最近交易分析")
+	require.Contains(t, formatted, "## 总体投资组合概览 [DeBank](https://debank.com)")
+	require.Contains(t, formatted, "## Top 10 代币持仓 [DeBank](https://debank.com)")
+	require.Contains(t, formatted, "## Top 10 NFT 持仓 [DeBank](https://debank.com)")
+	require.Contains(t, formatted, "## Top 10 DeFi 仓位 [DeBank](https://debank.com)")
+	require.Contains(t, formatted, "## 最近交易分析 [DeBank](https://debank.com)")
+	require.Contains(t, formatted, "章节标题必须逐字使用")
+	require.Contains(t, formatted, "不得改写")
+	require.Contains(t, formatted, "不要单独输出 `## 数据来源与新鲜度` 章节")
+	require.Contains(t, formatted, "结论与展望")
+	require.Contains(t, formatted, "<crypto_data>")
+	require.Contains(t, formatted, `{"intent":"token_analysis"}`)
+}
+
+func TestFormatCryptoDataSystemMessage_IncludesSourceSummary(t *testing.T) {
+	formatted := formatCryptoDataSystemMessage(json.RawMessage(`{
+		"intent":"token_analysis",
+		"timestamp":"2026-04-10T08:58:50Z",
+		"sources":[
+			{"name":"debank","status":"success","meta":{"adapter_names":["debank"]}},
+			{"name":"moralis","status":"success"}
+		]
+	}`))
+
+	require.Contains(t, formatted, "数据来源摘要：")
+	require.Contains(t, formatted, "数据时间：2026-04-10T08:58:50Z")
+	require.Contains(t, formatted, "来源：debank")
+	require.Contains(t, formatted, "adapter_names=debank")
+	require.Contains(t, formatted, "来源：moralis")
+	require.Contains(t, formatted, "<crypto_data>")
 }
 
 func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_PrependsCryptoDataSystemMessage(t *testing.T) {
@@ -379,6 +544,7 @@ func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_PrependsCryptoDat
 	require.Equal(t, "btc funding rate", gjson.GetBytes(enhancedBody, "messages.2.content").String())
 
 	injected := gjson.GetBytes(enhancedBody, "messages.1.content").String()
+	require.Contains(t, injected, "你是一个加密货币链上数据分析师")
 	require.Contains(t, injected, "<crypto_data>")
 	require.Contains(t, injected, `"intent":"token_analysis"`)
 	require.Contains(t, injected, `"name":"coinglass"`)
