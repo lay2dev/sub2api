@@ -33,4 +33,27 @@ describe('buildSystemLogDetail', () => {
     expect(detail).toContain('req=req-1')
     expect(detail).toContain('acc=88')
   })
+
+  it('renders crypto adapter names and upstream request id from extra fields', () => {
+    const detail = buildSystemLogDetail({
+      id: 2,
+      created_at: '2026-04-10T10:00:00Z',
+      level: 'info',
+      component: 'handler.openai_gateway.chat_completions',
+      message: 'openai_chat_completions.crypto_provider_response_prepared',
+      request_id: 'req-2',
+      client_request_id: 'creq-2',
+      user_id: 7,
+      account_id: 42,
+      platform: 'openai',
+      model: 'gpt-5.4',
+      extra: {
+        upstream_request_id: 'rid_crypto_prefetch',
+        crypto_adapter_names: ['dexscreener', 'coinglass'],
+      },
+    } satisfies OpsSystemLog)
+
+    expect(detail).toContain('upstream_request_id=rid_crypto_prefetch')
+    expect(detail).toContain('crypto_adapter_names=dexscreener,coinglass')
+  })
 })
