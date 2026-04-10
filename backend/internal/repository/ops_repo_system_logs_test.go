@@ -81,6 +81,46 @@ func TestBuildOpsSystemLogsCleanupWhere_WithClientRequestIDAndUserID(t *testing.
 	}
 }
 
+func TestBuildOpsSystemLogsWhere_WithCryptoAdapterName(t *testing.T) {
+	filter := &service.OpsSystemLogFilter{
+		CryptoAdapterName: "gecko",
+	}
+
+	where, args, hasConstraint := buildOpsSystemLogsWhere(filter)
+	if !hasConstraint {
+		t.Fatalf("expected hasConstraint=true")
+	}
+	if len(args) != 1 {
+		t.Fatalf("args len = %d, want 1", len(args))
+	}
+	if got := args[0]; got != "%gecko%" {
+		t.Fatalf("arg[0] = %v, want %%gecko%%", got)
+	}
+	if !contains(where, "jsonb_array_elements_text") {
+		t.Fatalf("where should inspect crypto_adapter_names json array: %s", where)
+	}
+}
+
+func TestBuildOpsSystemLogsCleanupWhere_WithCryptoAdapterName(t *testing.T) {
+	filter := &service.OpsSystemLogCleanupFilter{
+		CryptoAdapterName: "defillama",
+	}
+
+	where, args, hasConstraint := buildOpsSystemLogsCleanupWhere(filter)
+	if !hasConstraint {
+		t.Fatalf("expected hasConstraint=true")
+	}
+	if len(args) != 1 {
+		t.Fatalf("args len = %d, want 1", len(args))
+	}
+	if got := args[0]; got != "%defillama%" {
+		t.Fatalf("arg[0] = %v, want %%defillama%%", got)
+	}
+	if !contains(where, "jsonb_array_elements_text") {
+		t.Fatalf("where should inspect crypto_adapter_names json array: %s", where)
+	}
+}
+
 func contains(s string, sub string) bool {
 	return strings.Contains(s, sub)
 }

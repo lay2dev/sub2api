@@ -54,6 +54,7 @@ const filters = reactive({
   account_id: '',
   platform: '',
   model: '',
+  crypto_adapter_name: '',
   q: ''
 })
 
@@ -107,6 +108,7 @@ const buildQuery = () => {
   }
   if (filters.platform.trim()) query.platform = filters.platform.trim()
   if (filters.model.trim()) query.model = filters.model.trim()
+  if (filters.crypto_adapter_name.trim()) query.crypto_adapter_name = filters.crypto_adapter_name.trim()
   if (filters.q.trim()) query.q = filters.q.trim()
   return query
 }
@@ -210,6 +212,7 @@ const cleanupCurrentFilter = async () => {
       account_id: filters.account_id.trim() ? Number.parseInt(filters.account_id.trim(), 10) : undefined,
       platform: filters.platform.trim() || undefined,
       model: filters.model.trim() || undefined,
+      crypto_adapter_name: filters.crypto_adapter_name.trim() || undefined,
       q: filters.q.trim() || undefined
     }
     const res = await opsAPI.cleanupSystemLogs(payload)
@@ -234,6 +237,7 @@ const resetFilters = () => {
   filters.account_id = ''
   filters.platform = props.platformFilter || ''
   filters.model = ''
+  filters.crypto_adapter_name = ''
   filters.q = ''
   page.value = 1
   fetchLogs()
@@ -406,6 +410,10 @@ onMounted(async () => {
       <label class="text-xs text-gray-600 dark:text-gray-300">
         模型
         <input v-model="filters.model" type="text" class="input mt-1" />
+      </label>
+      <label class="text-xs text-gray-600 dark:text-gray-300">
+        Crypto Adapter
+        <input v-model="filters.crypto_adapter_name" type="text" class="input mt-1" placeholder="如 defillama" />
       </label>
       <label class="text-xs text-gray-600 dark:text-gray-300">
         关键词

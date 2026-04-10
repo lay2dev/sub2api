@@ -1397,6 +1397,12 @@ func buildOpsSystemLogsWhere(filter *service.OpsSystemLogFilter) (string, []any,
 			clauses = append(clauses, "COALESCE(l.model,'') = $"+itoa(len(args)))
 			hasConstraint = true
 		}
+		if v := strings.TrimSpace(filter.CryptoAdapterName); v != "" {
+			args = append(args, "%"+v+"%")
+			n := itoa(len(args))
+			clauses = append(clauses, "EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(l.extra->'crypto_adapter_names', '[]'::jsonb)) AS adapter(name) WHERE adapter.name ILIKE $"+n+")")
+			hasConstraint = true
+		}
 		if v := strings.TrimSpace(filter.Query); v != "" {
 			like := "%" + v + "%"
 			args = append(args, like)
@@ -1414,17 +1420,18 @@ func buildOpsSystemLogsCleanupWhere(filter *service.OpsSystemLogCleanupFilter) (
 		filter = &service.OpsSystemLogCleanupFilter{}
 	}
 	listFilter := &service.OpsSystemLogFilter{
-		StartTime:       filter.StartTime,
-		EndTime:         filter.EndTime,
-		Level:           filter.Level,
-		Component:       filter.Component,
-		RequestID:       filter.RequestID,
-		ClientRequestID: filter.ClientRequestID,
-		UserID:          filter.UserID,
-		AccountID:       filter.AccountID,
-		Platform:        filter.Platform,
-		Model:           filter.Model,
-		Query:           filter.Query,
+		StartTime:         filter.StartTime,
+		EndTime:           filter.EndTime,
+		Level:             filter.Level,
+		Component:         filter.Component,
+		RequestID:         filter.RequestID,
+		ClientRequestID:   filter.ClientRequestID,
+		UserID:            filter.UserID,
+		AccountID:         filter.AccountID,
+		Platform:          filter.Platform,
+		Model:             filter.Model,
+		Query:             filter.Query,
+		CryptoAdapterName: filter.CryptoAdapterName,
 	}
 	return buildOpsSystemLogsWhere(listFilter)
 }

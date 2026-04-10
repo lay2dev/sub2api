@@ -231,13 +231,14 @@ type OpsSystemLogFilter struct {
 	Level     string
 	Component string
 
-	RequestID       string
-	ClientRequestID string
-	UserID          *int64
-	AccountID       *int64
-	Platform        string
-	Model           string
-	Query           string
+	RequestID         string
+	ClientRequestID   string
+	UserID            *int64
+	AccountID         *int64
+	Platform          string
+	Model             string
+	Query             string
+	CryptoAdapterName string
 
 	Page     int
 	PageSize int
@@ -250,13 +251,14 @@ type OpsSystemLogCleanupFilter struct {
 	Level     string
 	Component string
 
-	RequestID       string
-	ClientRequestID string
-	UserID          *int64
-	AccountID       *int64
-	Platform        string
-	Model           string
-	Query           string
+	RequestID         string
+	ClientRequestID   string
+	UserID            *int64
+	AccountID         *int64
+	Platform          string
+	Model             string
+	Query             string
+	CryptoAdapterName string
 }
 
 type OpsSystemLogList struct {

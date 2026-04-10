@@ -904,6 +904,7 @@ export interface OpsSystemLogQuery {
   account_id?: number | null
   platform?: string
   model?: string
+  crypto_adapter_name?: string
   q?: string
 }
 
@@ -918,6 +919,7 @@ export interface OpsSystemLogCleanupRequest {
   account_id?: number | null
   platform?: string
   model?: string
+  crypto_adapter_name?: string
   q?: string
 }
 
