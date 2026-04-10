@@ -56,4 +56,29 @@ describe('buildSystemLogDetail', () => {
     expect(detail).toContain('upstream_request_id=rid_crypto_prefetch')
     expect(detail).toContain('crypto_adapter_names=dexscreener,coinglass')
   })
+
+  it('renders structured tool calls from crypto provider logs', () => {
+    const detail = buildSystemLogDetail({
+      id: 3,
+      created_at: '2026-04-10T10:00:00Z',
+      level: 'info',
+      component: 'handler.openai_gateway.chat_completions',
+      message: 'openai_chat_completions.crypto_provider_response_prepared',
+      extra: {
+        tool_calls: [
+          {
+            id: 'call_crypto_1',
+            type: 'function',
+            function: {
+              name: 'get_funding_rate',
+              arguments: '{"symbol":"BTC"}',
+            },
+          },
+        ],
+      },
+    } satisfies OpsSystemLog)
+
+    expect(detail).toContain('tool_calls=[{"id":"call_crypto_1"')
+    expect(detail).toContain('"name":"get_funding_rate"')
+  })
 })

@@ -39,12 +39,14 @@ const cryptoEnhancedPromptCacheKeyPrefix = "crypto_cc_"
 type OpenAICryptoChatPreparation struct {
 	EnhancedBody   []byte
 	AdapterNames   []string
+	ToolCalls      []map[string]any
 	PrefetchResult *OpenAIForwardResult
 }
 
 type openAICryptoChatFetchResult struct {
 	CryptoData     json.RawMessage
 	AdapterNames   []string
+	ToolCalls      []map[string]any
 	PrefetchResult *OpenAIForwardResult
 }
 
@@ -155,6 +157,7 @@ func (s *OpenAIGatewayService) PrepareCryptoEnhancedChatRequest(
 	return &OpenAICryptoChatPreparation{
 		EnhancedBody:   enhancedBody,
 		AdapterNames:   fetchResult.AdapterNames,
+		ToolCalls:      fetchResult.ToolCalls,
 		PrefetchResult: fetchResult.PrefetchResult,
 	}, nil
 }
@@ -314,6 +317,7 @@ func (s *OpenAIGatewayService) fetchCryptoDataForChatCompletions(
 	out := make(json.RawMessage, len(cryptoData))
 	copy(out, cryptoData)
 	adapterNames := extractCryptoAdapterNames(out)
+	toolCalls := extractToolCallsFromJSONPayload(respBody)
 	billingModel := strings.TrimSpace(payload.Model)
 	if billingModel == "" {
 		billingModel = prefetchModel
@@ -322,6 +326,7 @@ func (s *OpenAIGatewayService) fetchCryptoDataForChatCompletions(
 	return &openAICryptoChatFetchResult{
 		CryptoData:   out,
 		AdapterNames: adapterNames,
+		ToolCalls:    toolCalls,
 		PrefetchResult: &OpenAIForwardResult{
 			RequestID:     resp.Header.Get("x-request-id"),
 			Usage:         openAIUsageFromChatUsage(payload.Usage),
@@ -415,6 +420,7 @@ func (s *OpenAIGatewayService) fetchCryptoDataViaResponses(
 	return &openAICryptoChatFetchResult{
 		CryptoData:   cryptoData,
 		AdapterNames: extractCryptoAdapterNames(cryptoData),
+		ToolCalls:    extractToolCallsFromResponsesPayload(respBody, resp.Header),
 		PrefetchResult: &OpenAIForwardResult{
 			RequestID:     resp.Header.Get("x-request-id"),
 			Usage:         usage,
@@ -595,6 +601,82 @@ func extractCryptoAdapterNames(cryptoData json.RawMessage) []string {
 		return nil
 	}
 	return adapterNames
+}
+
+func extractToolCallsFromJSONPayload(payload []byte) []map[string]any {
+	if !gjson.ValidBytes(payload) {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	toolCalls := make([]map[string]any, 0)
+
+	appendToolCalls := func(array gjson.Result) {
+		if !array.Exists() || !array.IsArray() {
+			return
+		}
+		for _, item := range array.Array() {
+			raw := strings.TrimSpace(item.Raw)
+			if raw == "" {
+				continue
+			}
+			if _, ok := seen[raw]; ok {
+				continue
+			}
+			var decoded map[string]any
+			if err := json.Unmarshal([]byte(raw), &decoded); err != nil || len(decoded) == 0 {
+				continue
+			}
+			seen[raw] = struct{}{}
+			toolCalls = append(toolCalls, decoded)
+		}
+	}
+
+	appendToolCalls(gjson.GetBytes(payload, "tool_calls"))
+	appendToolCalls(gjson.GetBytes(payload, "response.tool_calls"))
+	appendToolCalls(gjson.GetBytes(payload, "item.tool_calls"))
+
+	choices := gjson.GetBytes(payload, "choices")
+	if choices.Exists() && choices.IsArray() {
+		for _, choice := range choices.Array() {
+			appendToolCalls(choice.Get("message.tool_calls"))
+			appendToolCalls(choice.Get("delta.tool_calls"))
+		}
+	}
+
+	if len(toolCalls) == 0 {
+		return nil
+	}
+	return toolCalls
+}
+
+func extractToolCallsFromResponsesPayload(body []byte, header http.Header) []map[string]any {
+	trimmed := bytes.TrimSpace(body)
+	isSSE := strings.Contains(header.Get("Content-Type"), "text/event-stream") ||
+		bytes.HasPrefix(trimmed, []byte("data:")) ||
+		bytes.HasPrefix(trimmed, []byte("event:"))
+	if !isSSE {
+		return extractToolCallsFromJSONPayload(trimmed)
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(trimmed))
+	scanner.Buffer(make([]byte, 0, 64*1024), defaultMaxLineSize)
+
+	var terminalJSON []byte
+	for scanner.Scan() {
+		data, ok := extractOpenAISSEDataLine(scanner.Text())
+		if !ok || data == "" || data == "[DONE]" || !gjson.Valid(data) {
+			continue
+		}
+		eventType := gjson.Get(data, "type").String()
+		if eventType == "response.completed" || eventType == "response.incomplete" {
+			terminalJSON = append(terminalJSON[:0], data...)
+		}
+	}
+	if len(terminalJSON) == 0 {
+		return nil
+	}
+	return extractToolCallsFromJSONPayload(terminalJSON)
 }
 
 func normalizeCryptoChatPrefetchResponseBody(headers http.Header, body []byte) ([]byte, error) {
