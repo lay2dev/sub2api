@@ -25,6 +25,28 @@ const getExtraStringList = (extra: Record<string, any> | undefined, key: string)
   return items.join(',')
 }
 
+const getExtraJSON = (extra: Record<string, any> | undefined, key: string) => {
+  if (!extra) return ''
+  const value = extra[key]
+  if (value == null) return ''
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return ''
+    try {
+      return JSON.stringify(JSON.parse(trimmed))
+    } catch {
+      return trimmed
+    }
+  }
+
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return ''
+  }
+}
+
 export const buildSystemLogDetail = (row: OpsSystemLog) => {
   const parts: string[] = []
   const msg = String(row.message || '').trim()
@@ -62,6 +84,7 @@ export const buildSystemLogDetail = (row: OpsSystemLog) => {
   const upstreamRequestID = getExtraString(extra, 'upstream_request_id')
   const accountName = getExtraString(extra, 'account_name')
   const cryptoAdapterNames = getExtraStringList(extra, 'crypto_adapter_names')
+  const toolCalls = getExtraJSON(extra, 'tool_calls')
 
   const cryptoParts: string[] = []
   if (cryptoPrefetch) cryptoParts.push(`crypto_prefetch=${cryptoPrefetch}`)
@@ -70,6 +93,7 @@ export const buildSystemLogDetail = (row: OpsSystemLog) => {
   if (upstreamRequestID) cryptoParts.push(`upstream_request_id=${upstreamRequestID}`)
   if (accountName) cryptoParts.push(`account_name=${accountName}`)
   if (cryptoAdapterNames) cryptoParts.push(`crypto_adapter_names=${cryptoAdapterNames}`)
+  if (toolCalls) cryptoParts.push(`tool_calls=${toolCalls}`)
   if (cryptoParts.length > 0) parts.push(cryptoParts.join(' '))
 
   const errors = getExtraString(extra, 'errors')
