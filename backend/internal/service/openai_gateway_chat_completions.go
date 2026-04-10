@@ -50,6 +50,44 @@ type openAICryptoChatFetchResult struct {
 	PrefetchResult *OpenAIForwardResult
 }
 
+// cryptoDataHeader is a minimal parse of the crypto_data JSON used to build
+// the structured system message header. Only intent and source metadata are
+// needed; the full data blob is still forwarded verbatim to the LLM.
+type cryptoDataHeader struct {
+	Intent  string `json:"intent"`
+	Sources []struct {
+		Status string `json:"status"`
+		Meta   struct {
+			AdapterNames []string `json:"adapter_names"`
+			ToolCalls    []string `json:"tool_calls"`
+		} `json:"meta"`
+	} `json:"sources"`
+}
+
+// cryptoIntentGuidance maps the intent field from crypto_data to a focused
+// instruction telling the LLM what type of analysis to perform.
+var cryptoIntentGuidance = map[string]string{
+	"uniswap":        "Focus on Uniswap liquidity pool metrics, LP position performance, fee tiers, and range setting for concentrated liquidity.",
+	"token-research": "Focus on token fundamentals: team background, vesting schedules, unlock events, on-chain holder distribution, and narrative strength.",
+	"crypto-basic":   "Focus on market price action, on-chain activity, whale movements, funding rates, and macro sentiment signals.",
+	"defi-lending":   "Focus on lending protocol health: collateral ratios, liquidation risk, interest rate comparisons, and utilization rates.",
+	"dex-routing":    "Focus on optimal swap routing across DEXes: price impact, slippage, gas cost, and route path efficiency.",
+	"token_analysis": "Focus on token-level analysis including price trends, volume, market cap, and on-chain signals.",
+}
+
+// cryptoToolCallDescriptions maps a known tool call name to a short human-readable
+// description of the data it provides. Unknown tool names get a generic fallback.
+var cryptoToolCallDescriptions = map[string]string{
+	"crypto-dex-volume.fetch_snapshot":  "DEX trading volume snapshot across pools",
+	"crypto-dex.fetch_pool_discovery":   "DEX pool discovery: liquidity, TVL, and pool metadata",
+	"crypto-lp.fetch_positions":         "LP position details: current value, fees earned, and range status",
+	"crypto-yield.fetch_snapshot":       "Yield farming and liquidity mining rates",
+	"crypto-prediction.fetch_consensus": "Analyst price predictions and consensus targets",
+	"crypto-market.fetch_price":         "Live token price, volume, and market cap data",
+	"crypto-news.fetch_newsflash":       "Recent crypto news headlines and sentiment signals",
+	"crypto-research.search_web":        "Web search results for token research and background information",
+}
+
 func deriveCryptoEnhancedPromptCacheKey(originalPromptCacheKey string, enhancedBody []byte) string {
 	seed := strings.TrimSpace(originalPromptCacheKey)
 	if seed == "" {
@@ -91,17 +129,73 @@ func resolveOpenAICryptoPrefetchModel(account *Account, requestedModel string) s
 func formatCryptoDataSystemMessage(cryptoData json.RawMessage) string {
 	trimmed := bytes.TrimSpace(cryptoData)
 	if len(trimmed) == 0 {
-		return "Use the following crypto_data as supplemental context for the user's request.\n<crypto_data>\n{}\n</crypto_data>"
+		return "You have access to live crypto market data fetched for this request.\n\n" +
+			"<crypto_data>\n{}\n</crypto_data>"
 	}
 
 	var compact bytes.Buffer
 	if err := json.Compact(&compact, trimmed); err != nil {
+		compact.Reset()
 		compact.Write(trimmed)
 	}
 
-	return "Use the following crypto_data as supplemental context for the user's request.\n<crypto_data>\n" +
-		compact.String() +
-		"\n</crypto_data>"
+	header := buildCryptoDataMessageHeader(trimmed)
+	return header + "<crypto_data>\n" + compact.String() + "\n</crypto_data>"
+}
+
+// buildCryptoDataMessageHeader returns the prose portion of the system message
+// that appears before the <crypto_data> block. It parses intent and successful
+// sources on a best-effort basis; parse errors produce a minimal generic header.
+func buildCryptoDataMessageHeader(cryptoData []byte) string {
+	var sb strings.Builder
+	sb.WriteString("You have access to live crypto market data fetched for this request.\n\n")
+
+	var hdr cryptoDataHeader
+	if err := json.Unmarshal(cryptoData, &hdr); err != nil {
+		sb.WriteString("Use the following data as supplemental crypto market context.\n\n")
+		return sb.String()
+	}
+
+	if guidance, ok := cryptoIntentGuidance[strings.TrimSpace(hdr.Intent)]; ok {
+		sb.WriteString(guidance)
+		sb.WriteByte('\n')
+	}
+
+	type sourceEntry struct{ toolCall, adapterName string }
+	var entries []sourceEntry
+	for _, src := range hdr.Sources {
+		if !strings.EqualFold(strings.TrimSpace(src.Status), "success") {
+			continue
+		}
+		adapterName := ""
+		if len(src.Meta.AdapterNames) > 0 {
+			adapterName = strings.TrimSpace(src.Meta.AdapterNames[0])
+		}
+		for _, tc := range src.Meta.ToolCalls {
+			tc = strings.TrimSpace(tc)
+			if tc != "" {
+				entries = append(entries, sourceEntry{toolCall: tc, adapterName: adapterName})
+			}
+		}
+	}
+
+	if len(entries) > 0 {
+		sb.WriteString("\nAvailable data sources:\n")
+		for _, e := range entries {
+			desc := cryptoToolCallDescriptions[e.toolCall]
+			if desc == "" {
+				desc = "live crypto data"
+			}
+			if e.adapterName != "" {
+				sb.WriteString("- " + e.toolCall + " (" + e.adapterName + "): " + desc + "\n")
+			} else {
+				sb.WriteString("- " + e.toolCall + ": " + desc + "\n")
+			}
+		}
+		sb.WriteByte('\n')
+	}
+
+	return sb.String()
 }
 
 func injectCryptoDataSystemMessage(body []byte, cryptoData json.RawMessage) ([]byte, error) {

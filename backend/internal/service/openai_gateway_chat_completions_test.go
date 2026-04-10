@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -381,6 +382,9 @@ func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_PrependsCryptoDat
 	require.Contains(t, injected, "<crypto_data>")
 	require.Contains(t, injected, `"intent":"token_analysis"`)
 	require.Contains(t, injected, `"name":"coinglass"`)
+	require.Contains(t, injected, "You have access to live crypto market data fetched for this request.")
+	require.Contains(t, injected, "Available data sources:")
+	require.Contains(t, injected, "crypto-market.fetch_price (dexscreener)")
 	require.NotNil(t, prepared.PrefetchResult)
 	require.Equal(t, []string{"dexscreener", "coinglass"}, prepared.AdapterNames)
 	require.Len(t, prepared.ToolCalls, 1)
@@ -577,4 +581,154 @@ func TestOpenAIGatewayService_PrepareCryptoEnhancedChatRequest_ErrorsWhenCryptoD
 	)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "crypto.crypto_data")
+}
+
+func TestFormatCryptoDataSystemMessage_KnownIntentAndSources(t *testing.T) {
+	raw := json.RawMessage(`{
+		"intent": "uniswap",
+		"sources": [
+			{
+				"name": "pool_data",
+				"status": "success",
+				"meta": {
+					"adapter_names": ["geckoterminal"],
+					"tool_calls": ["crypto-dex.fetch_pool_discovery"]
+				}
+			},
+			{
+				"name": "lp_data",
+				"status": "success",
+				"meta": {
+					"adapter_names": ["revert"],
+					"tool_calls": ["crypto-lp.fetch_positions"]
+				}
+			}
+		]
+	}`)
+
+	msg := formatCryptoDataSystemMessage(raw)
+
+	require.Contains(t, msg, "You have access to live crypto market data fetched for this request.")
+	require.Contains(t, msg, "Uniswap liquidity pool")
+	require.Contains(t, msg, "Available data sources:")
+	require.Contains(t, msg, "crypto-dex.fetch_pool_discovery (geckoterminal): DEX pool discovery")
+	require.Contains(t, msg, "crypto-lp.fetch_positions (revert): LP position details")
+	require.Contains(t, msg, "<crypto_data>")
+	require.Contains(t, msg, `"intent":"uniswap"`)
+	require.Contains(t, msg, "</crypto_data>")
+
+	// Header must appear before the data block
+	require.Less(t, strings.Index(msg, "Available data sources:"), strings.Index(msg, "<crypto_data>"))
+}
+
+func TestFormatCryptoDataSystemMessage_UnknownIntentFallsBack(t *testing.T) {
+	raw := json.RawMessage(`{
+		"intent": "some-future-intent",
+		"sources": [
+			{
+				"status": "success",
+				"meta": {
+					"adapter_names": ["foo"],
+					"tool_calls": ["crypto-market.fetch_price"]
+				}
+			}
+		]
+	}`)
+
+	msg := formatCryptoDataSystemMessage(raw)
+
+	require.Contains(t, msg, "You have access to live crypto market data fetched for this request.")
+	require.Contains(t, msg, "Available data sources:")
+	require.Contains(t, msg, "crypto-market.fetch_price (foo)")
+	require.Contains(t, msg, "<crypto_data>")
+	// No intent guidance for unknown intent
+	require.NotContains(t, msg, "Focus on")
+}
+
+func TestFormatCryptoDataSystemMessage_UnknownToolCallGetsGenericDescription(t *testing.T) {
+	raw := json.RawMessage(`{
+		"intent": "crypto-basic",
+		"sources": [
+			{
+				"status": "success",
+				"meta": {
+					"adapter_names": ["new-adapter"],
+					"tool_calls": ["crypto-future.fetch_something_new"]
+				}
+			}
+		]
+	}`)
+
+	msg := formatCryptoDataSystemMessage(raw)
+
+	require.Contains(t, msg, "crypto-future.fetch_something_new (new-adapter): live crypto data")
+}
+
+func TestFormatCryptoDataSystemMessage_FailedSourcesExcluded(t *testing.T) {
+	raw := json.RawMessage(`{
+		"intent": "defi-lending",
+		"sources": [
+			{
+				"status": "success",
+				"meta": {
+					"adapter_names": ["aave"],
+					"tool_calls": ["crypto-yield.fetch_snapshot"]
+				}
+			},
+			{
+				"status": "error",
+				"meta": {
+					"adapter_names": ["compound"],
+					"tool_calls": ["crypto-dex-volume.fetch_snapshot"]
+				}
+			}
+		]
+	}`)
+
+	msg := formatCryptoDataSystemMessage(raw)
+
+	// Only the header portion should be checked; the raw JSON blob always contains all sources.
+	header := msg[:strings.Index(msg, "<crypto_data>")]
+	require.Contains(t, header, "crypto-yield.fetch_snapshot")
+	require.NotContains(t, header, "crypto-dex-volume.fetch_snapshot")
+}
+
+func TestFormatCryptoDataSystemMessage_IntentOnlyNoSources(t *testing.T) {
+	raw := json.RawMessage(`{"intent":"token_analysis"}`)
+
+	msg := formatCryptoDataSystemMessage(raw)
+
+	require.Contains(t, msg, "You have access to live crypto market data fetched for this request.")
+	require.Contains(t, msg, "token-level analysis")
+	require.NotContains(t, msg, "Available data sources:")
+	require.Contains(t, msg, "<crypto_data>")
+	require.Contains(t, msg, `"intent":"token_analysis"`)
+}
+
+func TestFormatCryptoDataSystemMessage_EmptyData(t *testing.T) {
+	msg := formatCryptoDataSystemMessage(json.RawMessage(nil))
+
+	require.Contains(t, msg, "You have access to live crypto market data fetched for this request.")
+	require.Contains(t, msg, "<crypto_data>")
+	require.Contains(t, msg, "{}")
+}
+
+func TestFormatCryptoDataSystemMessage_SourceWithNoAdapterName(t *testing.T) {
+	raw := json.RawMessage(`{
+		"intent": "crypto-basic",
+		"sources": [
+			{
+				"status": "success",
+				"meta": {
+					"adapter_names": [],
+					"tool_calls": ["crypto-news.fetch_newsflash"]
+				}
+			}
+		]
+	}`)
+
+	msg := formatCryptoDataSystemMessage(raw)
+
+	require.Contains(t, msg, "- crypto-news.fetch_newsflash: Recent crypto news")
+	require.NotContains(t, msg, "crypto-news.fetch_newsflash ()")
 }
