@@ -47,6 +47,10 @@ const getExtraJSON = (extra: Record<string, any> | undefined, key: string) => {
   }
 }
 
+export const getSystemLogRequestBody = (row: OpsSystemLog) => {
+  return getExtraJSON(row.extra || {}, 'upstream_request_body')
+}
+
 export const buildSystemLogDetail = (row: OpsSystemLog) => {
   const parts: string[] = []
   const msg = String(row.message || '').trim()
@@ -88,7 +92,7 @@ export const buildSystemLogDetail = (row: OpsSystemLog) => {
   const upstreamURL = getExtraString(extra, 'upstream_url')
   const upstreamPath = getExtraString(extra, 'upstream_path')
   const openAIPassthrough = getExtraString(extra, 'openai_passthrough')
-  const upstreamRequestBody = getExtraString(extra, 'upstream_request_body')
+  const upstreamRequestBody = getSystemLogRequestBody(row)
   const upstreamRequestBodyTruncated = getExtraString(extra, 'upstream_request_body_truncated')
 
   const cryptoParts: string[] = []
@@ -114,7 +118,6 @@ export const buildSystemLogDetail = (row: OpsSystemLog) => {
     if (upstreamPath) outboundParts.push(`upstream_path=${upstreamPath}`)
     if (openAIPassthrough) outboundParts.push(`openai_passthrough=${openAIPassthrough}`)
     if (upstreamRequestBodyTruncated) outboundParts.push(`upstream_request_body_truncated=${upstreamRequestBodyTruncated}`)
-    if (upstreamRequestBody) outboundParts.push(`upstream_request_body=${upstreamRequestBody}`)
     if (outboundParts.length > 0) parts.push(outboundParts.join(' '))
   }
 

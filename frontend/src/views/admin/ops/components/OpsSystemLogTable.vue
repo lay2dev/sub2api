@@ -3,9 +3,11 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { opsAPI, type OpsRuntimeLogConfig, type OpsSystemLog, type OpsSystemLogSinkHealth } from '@/api/admin/ops'
 import Pagination from '@/components/common/Pagination.vue'
 import { useAppStore } from '@/stores'
-import { buildSystemLogDetail } from '../utils/systemLogDetail'
+import { useClipboard } from '@/composables/useClipboard'
+import { buildSystemLogDetail, getSystemLogRequestBody } from '../utils/systemLogDetail'
 
 const appStore = useAppStore()
+const { copyToClipboard } = useClipboard()
 
 const props = withDefaults(defineProps<{
   platformFilter?: string
@@ -29,6 +31,7 @@ const health = ref<OpsSystemLogSinkHealth>({
   written_count: 0,
   avg_write_delay_ms: 0
 })
+const expandedRequestBodies = reactive<Record<number, boolean>>({})
 
 const runtimeLoading = ref(false)
 const runtimeSaving = ref(false)
@@ -73,6 +76,17 @@ const formatTime = (value: string) => {
 }
 
 const formatSystemLogDetail = (row: OpsSystemLog) => buildSystemLogDetail(row)
+const getRequestBody = (row: OpsSystemLog) => getSystemLogRequestBody(row)
+const hasRequestBody = (row: OpsSystemLog) => getRequestBody(row).length > 0
+const isRequestBodyExpanded = (id: number) => Boolean(expandedRequestBodies[id])
+const toggleRequestBody = (id: number) => {
+  expandedRequestBodies[id] = !expandedRequestBodies[id]
+}
+const copyRequestBody = async (row: OpsSystemLog) => {
+  const body = getRequestBody(row)
+  if (!body) return
+  await copyToClipboard(body, 'Request body copied')
+}
 
 const toRFC3339 = (value: string) => {
   if (!value) return undefined
@@ -441,7 +455,33 @@ onMounted(async () => {
                 </span>
               </td>
               <td class="px-3 py-2 text-xs text-gray-700 dark:text-gray-300 whitespace-normal break-all">
-                {{ formatSystemLogDetail(row) }}
+                <div>{{ formatSystemLogDetail(row) }}</div>
+                <div
+                  v-if="hasRequestBody(row)"
+                  class="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-2 dark:border-dark-700 dark:bg-dark-800/70"
+                >
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Request Body
+                    </span>
+                    <div class="flex items-center gap-2">
+                      <button type="button" class="btn btn-secondary btn-sm !px-2 !py-1" @click="copyRequestBody(row)">
+                        复制
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-secondary btn-sm !px-2 !py-1"
+                        @click="toggleRequestBody(row.id)"
+                      >
+                        {{ isRequestBodyExpanded(row.id) ? '收起' : '展开' }}
+                      </button>
+                    </div>
+                  </div>
+                  <pre
+                    class="mt-2 rounded-md bg-white/80 p-2 font-mono text-[11px] leading-5 text-gray-700 whitespace-pre-wrap break-all dark:bg-dark-900/80 dark:text-gray-200"
+                    :class="isRequestBodyExpanded(row.id) ? '' : 'max-h-24 overflow-hidden'"
+                  >{{ getRequestBody(row) }}</pre>
+                </div>
               </td>
             </tr>
           </tbody>
