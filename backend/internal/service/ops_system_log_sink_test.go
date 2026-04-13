@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/stretchr/testify/require"
 )
 
 func TestOpsSystemLogSink_ShouldIndex(t *testing.T) {
@@ -50,15 +51,24 @@ func TestOpsSystemLogSink_ShouldIndex(t *testing.T) {
 			event: &logger.LogEvent{Level: "info", Component: "audit.log_config_change"},
 			want:  true,
 		},
-		{
-			name: "crypto prefetch prepared message",
-			event: &logger.LogEvent{
-				Level:     "info",
-				Component: "handler.openai_gateway.chat_completions",
-				Message:   "openai_chat_completions.crypto_provider_response_prepared",
-			},
-			want: true,
+	{
+		name: "crypto prefetch prepared message",
+		event: &logger.LogEvent{
+			Level:     "info",
+			Component: "handler.openai_gateway.chat_completions",
+			Message:   "openai_chat_completions.crypto_provider_response_prepared",
 		},
+		want: true,
+	},
+	{
+		name: "openai upstream agent request message",
+		event: &logger.LogEvent{
+			Level:     "info",
+			Component: "service.openai_gateway",
+			Message:   "openai.upstream_agent_request",
+		},
+		want: true,
+	},
 		{
 			name: "audit component from fields (real zap path)",
 			event: &logger.LogEvent{
@@ -196,6 +206,46 @@ func TestOpsSystemLogSink_StartStopAndFlushSuccess(t *testing.T) {
 	if health.WrittenCount == 0 {
 		t.Fatalf("written_count should be >0")
 	}
+}
+
+func TestOpsSystemLogSink_FlushRedactsAndPersistsOutboundRequestBody(t *testing.T) {
+	done := make(chan struct{}, 1)
+	var captured []*OpsInsertSystemLogInput
+	repo := &opsRepoMock{
+		BatchInsertSystemLogsFn: func(_ context.Context, inputs []*OpsInsertSystemLogInput) (int64, error) {
+			captured = append(captured, inputs...)
+			select {
+			case done <- struct{}{}:
+			default:
+			}
+			return int64(len(inputs)), nil
+		},
+	}
+
+	sink := NewOpsSystemLogSink(repo)
+	sink.batchSize = 1
+	sink.flushInterval = 10 * time.Millisecond
+	sink.Start()
+	defer sink.Stop()
+
+	logger.WriteSinkEvent("info", "service.openai_gateway", "openai.upstream_agent_request", map[string]any{
+		"request_id":        "req-ops-body",
+		"client_request_id": "creq-ops-body",
+		"platform":          "openai",
+		"model":             "gpt-5.2",
+		"upstream_url":      "https://crypto-provider.example.com/v1/chat/completions",
+		"upstream_request_body": `{"access_token":"secret-token","messages":[{"role":"user","content":"btc"}]}`,
+	})
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timeout waiting for sink flush")
+	}
+
+	require.Len(t, captured, 1)
+	require.Contains(t, captured[0].ExtraJSON, `"upstream_request_body":"{\"access_token\":\"***"`)
+	require.Contains(t, captured[0].ExtraJSON, `btc`)
 }
 
 func TestOpsSystemLogSink_FlushFailureUpdatesHealth(t *testing.T) {
