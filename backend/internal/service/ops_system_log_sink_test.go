@@ -247,7 +247,7 @@ func TestOpsSystemLogSink_FlushRedactsAndPersistsOutboundRequestBody(t *testing.
 		"platform":              "openai",
 		"model":                 "gpt-5.2",
 		"upstream_url":          "https://crypto-provider.example.com/v1/chat/completions",
-		"upstream_request_body": `{"access_token":"secret-token","messages":[{"role":"user","content":"btc"}]}`,
+		"upstream_request_body": `{"access_token":"***","messages":[{"role":"user","content":"btc"}]}`,
 	})
 
 	select {
