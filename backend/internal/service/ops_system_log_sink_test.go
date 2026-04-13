@@ -228,6 +228,9 @@ func TestOpsSystemLogSink_FlushRedactsAndPersistsOutboundRequestBody(t *testing.
 	sink.Start()
 	defer sink.Stop()
 
+	logger.SetSink(sink)
+	defer logger.SetSink(nil)
+
 	logger.WriteSinkEvent("info", "service.openai_gateway", "openai.upstream_agent_request", map[string]any{
 		"request_id":        "req-ops-body",
 		"client_request_id": "creq-ops-body",
