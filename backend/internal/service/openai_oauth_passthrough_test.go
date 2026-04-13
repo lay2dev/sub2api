@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -823,6 +824,80 @@ func TestOpenAIGatewayService_APIKeyPassthrough_PreservesBodyAndUsesResponsesEnd
 	require.Equal(t, "Bearer sk-api-key", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, "curl/8.0", upstream.lastReq.Header.Get("User-Agent"))
 	require.Empty(t, upstream.lastReq.Header.Get("X-Test"))
+}
+
+func TestOpenAIGatewayService_APIKeyPassthrough_EmitsOutboundRequestLogWithContextCorrelation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logSink, restore := captureStructuredLog(t)
+	defer restore()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
+	req.Header.Set("User-Agent", "curl/8.0")
+	req.Header.Set("X-Request-Id", "req-header")
+	req.Header.Set("X-Client-Request-Id", "creq-header")
+	ctx := context.WithValue(req.Context(), ctxkey.RequestID, "req-ctx")
+	ctx = context.WithValue(ctx, ctxkey.ClientRequestID, "creq-ctx")
+	c.Request = req.WithContext(ctx)
+
+	originalBody := []byte(`{"model":"gpt-5.2","stream":false,"input":[{"type":"text","text":"hi"}],"access_token":"secret-token"}`)
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"rid"}},
+		Body:       io.NopCloser(strings.NewReader(`{"output":[],"usage":{"input_tokens":1,"output_tokens":1}}`)),
+	}
+	upstream := &httpUpstreamRecorder{resp: resp}
+
+	svc := &OpenAIGatewayService{
+		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
+		httpUpstream: upstream,
+	}
+
+	account := &Account{
+		ID:             457,
+		Name:           "apikey-acc-log",
+		Platform:       PlatformOpenAI,
+		Type:           AccountTypeAPIKey,
+		Concurrency:    1,
+		Credentials:    map[string]any{"api_key": "sk-api-key", "base_url": "https://api.openai.com"},
+		Extra:          map[string]any{"openai_passthrough": true},
+		Status:         StatusActive,
+		Schedulable:    true,
+		RateMultiplier: f64p(1),
+	}
+
+	_, err := svc.Forward(context.Background(), c, account, originalBody)
+	require.NoError(t, err)
+
+	require.True(t, logSink.ContainsMessageAtLevel("openai.upstream_agent_request", "info"))
+	require.True(t, logSink.ContainsFieldValue("request_id", "req-ctx"))
+	require.True(t, logSink.ContainsFieldValue("client_request_id", "creq-ctx"))
+	require.False(t, logSink.ContainsFieldValue("request_id", "req-header"))
+	require.False(t, logSink.ContainsFieldValue("client_request_id", "creq-header"))
+	require.True(t, logSink.ContainsFieldValue("upstream_request_body", `"access_token":"***"`))
+	require.False(t, logSink.ContainsFieldValue("upstream_request_body", "secret-token"))
+}
+
+func TestLogOpenAIUpstreamAgentRequest_SanitizesUpstreamURL(t *testing.T) {
+	logSink, restore := captureStructuredLog(t)
+	defer restore()
+
+	upstreamReq, err := http.NewRequest(http.MethodPost, "https://user:secret@crypto-provider.example.com/v1/chat/completions?access_token=abc123&foo=bar", strings.NewReader(`{"model":"gpt-5.2"}`))
+	require.NoError(t, err)
+
+	logOpenAIUpstreamAgentRequest(
+		&Account{ID: 99, Name: "url-safety", Platform: PlatformOpenAI},
+		upstreamReq,
+		[]byte(`{"model":"gpt-5.2","access_token":"secret-token"}`),
+		false,
+		openAIUpstreamRequestLogOptions{},
+	)
+
+	require.True(t, logSink.ContainsMessageAtLevel("openai.upstream_agent_request", "info"))
+	require.True(t, logSink.ContainsFieldValue("upstream_url", "https://crypto-provider.example.com/v1/chat/completions"))
+	require.False(t, logSink.ContainsFieldValue("upstream_url", "user:secret"))
+	require.False(t, logSink.ContainsFieldValue("upstream_url", "access_token="))
 }
 
 func TestOpenAIGatewayService_OAuthPassthrough_WarnOnTimeoutHeadersForStream(t *testing.T) {

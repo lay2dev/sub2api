@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
@@ -98,6 +99,41 @@ var codexCLIOnlyDebugHeaderWhitelist = []string{
 	"X-Client-Request-ID",
 	"X-Forwarded-For",
 	"X-Real-IP",
+}
+
+func buildOpenAIUpstreamRequestLogOptions(c *gin.Context) openAIUpstreamRequestLogOptions {
+	opts := openAIUpstreamRequestLogOptions{}
+	if c == nil {
+		return opts
+	}
+
+	if c.Request != nil {
+		requestCtx := c.Request.Context()
+		if requestID, ok := requestCtx.Value(ctxkey.RequestID).(string); ok {
+			opts.RequestID = strings.TrimSpace(requestID)
+		}
+		if clientRequestID, ok := requestCtx.Value(ctxkey.ClientRequestID).(string); ok {
+			opts.ClientRequestID = strings.TrimSpace(clientRequestID)
+		}
+	}
+
+	if opts.RequestID == "" {
+		opts.RequestID = strings.TrimSpace(c.Writer.Header().Get("X-Request-ID"))
+	}
+	if opts.RequestID == "" {
+		opts.RequestID = strings.TrimSpace(c.GetHeader("X-Request-ID"))
+	}
+	if opts.ClientRequestID == "" {
+		opts.ClientRequestID = strings.TrimSpace(c.GetHeader("X-Client-Request-Id"))
+	}
+
+	if v, ok := c.Get("openai_passthrough"); ok {
+		if passthrough, ok := v.(bool); ok {
+			opts.OpenAIPassthrough = &passthrough
+		}
+	}
+
+	return opts
 }
 
 // OpenAICodexUsageSnapshot represents Codex API usage limits from response headers
@@ -2154,6 +2190,8 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			proxyURL = account.Proxy.URL()
 		}
 
+		logOpenAIUpstreamAgentRequest(account, upstreamReq, body, reqStream, buildOpenAIUpstreamRequestLogOptions(c))
+
 		// Send request
 		upstreamStart := time.Now()
 		resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
@@ -2367,6 +2405,13 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	if c != nil {
 		c.Set("openai_passthrough", true)
 	}
+	logOpenAIUpstreamAgentRequest(
+		account,
+		upstreamReq,
+		body,
+		gjson.GetBytes(body, "stream").Bool(),
+		buildOpenAIUpstreamRequestLogOptions(c),
+	)
 
 	upstreamStart := time.Now()
 	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)

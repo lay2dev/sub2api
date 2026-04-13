@@ -47,6 +47,10 @@ const getExtraJSON = (extra: Record<string, any> | undefined, key: string) => {
   }
 }
 
+export const getSystemLogRequestBody = (row: OpsSystemLog) => {
+  return getExtraJSON(row.extra || {}, 'upstream_request_body')
+}
+
 export const buildSystemLogDetail = (row: OpsSystemLog) => {
   const parts: string[] = []
   const msg = String(row.message || '').trim()
@@ -85,16 +89,37 @@ export const buildSystemLogDetail = (row: OpsSystemLog) => {
   const accountName = getExtraString(extra, 'account_name')
   const cryptoAdapterNames = getExtraStringList(extra, 'crypto_adapter_names')
   const toolCalls = getExtraJSON(extra, 'tool_calls')
+  const upstreamURL = getExtraString(extra, 'upstream_url')
+  const upstreamPath = getExtraString(extra, 'upstream_path')
+  const openAIPassthrough = getExtraString(extra, 'openai_passthrough')
+  const upstreamRequestBody = getSystemLogRequestBody(row)
+  const upstreamRequestBodyTruncated = getExtraString(extra, 'upstream_request_body_truncated')
 
   const cryptoParts: string[] = []
+  const hasCryptoDetails = Boolean(
+    cryptoPrefetch || fallbackToUpstream || prefetchTransport || upstreamRequestID || cryptoAdapterNames || toolCalls,
+  )
   if (cryptoPrefetch) cryptoParts.push(`crypto_prefetch=${cryptoPrefetch}`)
   if (fallbackToUpstream) cryptoParts.push(`fallback_to_upstream=${fallbackToUpstream}`)
   if (prefetchTransport) cryptoParts.push(`prefetch_transport=${prefetchTransport}`)
   if (upstreamRequestID) cryptoParts.push(`upstream_request_id=${upstreamRequestID}`)
-  if (accountName) cryptoParts.push(`account_name=${accountName}`)
+  if (hasCryptoDetails && accountName) cryptoParts.push(`account_name=${accountName}`)
   if (cryptoAdapterNames) cryptoParts.push(`crypto_adapter_names=${cryptoAdapterNames}`)
   if (toolCalls) cryptoParts.push(`tool_calls=${toolCalls}`)
   if (cryptoParts.length > 0) parts.push(cryptoParts.join(' '))
+
+  const outboundParts: string[] = []
+  const hasOutboundInfo = Boolean(
+    upstreamURL || upstreamPath || openAIPassthrough || upstreamRequestBody || upstreamRequestBodyTruncated,
+  )
+  if (hasOutboundInfo) {
+    if (accountName && !hasCryptoDetails) outboundParts.push(`account_name=${accountName}`)
+    if (upstreamURL) outboundParts.push(`upstream_url=${upstreamURL}`)
+    if (upstreamPath) outboundParts.push(`upstream_path=${upstreamPath}`)
+    if (openAIPassthrough) outboundParts.push(`openai_passthrough=${openAIPassthrough}`)
+    if (upstreamRequestBodyTruncated) outboundParts.push(`upstream_request_body_truncated=${upstreamRequestBodyTruncated}`)
+    if (outboundParts.length > 0) parts.push(outboundParts.join(' '))
+  }
 
   const errors = getExtraString(extra, 'errors')
   if (errors) parts.push(`errors=${errors}`)

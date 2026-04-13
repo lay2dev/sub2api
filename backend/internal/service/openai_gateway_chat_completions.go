@@ -933,6 +933,13 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
+	logOpenAIUpstreamAgentRequest(
+		account,
+		upstreamReq,
+		responsesBody,
+		gjson.GetBytes(responsesBody, "stream").Bool(),
+		buildOpenAIUpstreamRequestLogOptions(c),
+	)
 	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
 	if err != nil {
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
@@ -1378,6 +1385,13 @@ func (s *OpenAIGatewayService) ForwardChatCompletionsPassthrough(
 	if c != nil {
 		c.Set("openai_passthrough", true)
 	}
+	logOpenAIUpstreamAgentRequest(
+		account,
+		upstreamReq,
+		forwardBody,
+		gjson.GetBytes(forwardBody, "stream").Bool(),
+		buildOpenAIUpstreamRequestLogOptions(c),
+	)
 
 	upstreamStart := time.Now()
 	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)

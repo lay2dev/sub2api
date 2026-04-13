@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { OpsSystemLog } from '@/api/admin/ops'
-import { buildSystemLogDetail } from '../systemLogDetail'
+import { buildSystemLogDetail, getSystemLogRequestBody } from '../systemLogDetail'
 
 describe('buildSystemLogDetail', () => {
   it('renders crypto prefetch fallback fields for ops system logs', () => {
@@ -70,5 +70,61 @@ describe('buildSystemLogDetail', () => {
     } satisfies OpsSystemLog)
 
     expect(detail).toContain('tool_calls=["crypto-market.fetch_price"]')
+  })
+
+  it('renders outbound upstream request metadata and body for agent requests', () => {
+    const row = {
+      id: 4,
+      created_at: '2026-04-13T10:00:00Z',
+      level: 'info',
+      component: 'service.openai_gateway',
+      message: 'openai.upstream_agent_request',
+      request_id: 'req-upstream-agent',
+      client_request_id: 'creq-upstream-agent',
+      account_id: 77,
+      platform: 'openai',
+      model: 'gpt-5.2',
+      extra: {
+        account_name: 'owlia-crypto-provider-log',
+        upstream_url: 'https://crypto-provider.example.com/v1/chat/completions',
+        upstream_path: '/v1/chat/completions',
+        method: 'POST',
+        stream: false,
+        openai_passthrough: true,
+        upstream_request_body: '{"messages":[{"role":"user","content":"btc"}]}',
+        upstream_request_body_truncated: false,
+      },
+    } satisfies OpsSystemLog
+    const detail = buildSystemLogDetail(row)
+
+    expect(detail).toContain('upstream_url=https://crypto-provider.example.com/v1/chat/completions')
+    expect(detail).toContain('upstream_path=/v1/chat/completions')
+    expect(detail).toContain('account_name=owlia-crypto-provider-log')
+    expect(detail).toContain('method=POST')
+    expect(detail).toContain('openai_passthrough=true')
+    expect(detail).not.toContain('upstream_request_body=')
+    expect(getSystemLogRequestBody(row)).toBe('{"messages":[{"role":"user","content":"btc"}]}')
+    expect(detail.match(/account_name=owlia-crypto-provider-log/g)).toHaveLength(1)
+    expect(detail.match(/method=POST/g)).toHaveLength(1)
+  })
+
+  it('renders account_name only once when crypto and outbound fields coexist', () => {
+    const detail = buildSystemLogDetail({
+      id: 5,
+      created_at: '2026-04-13T10:00:00Z',
+      level: 'info',
+      component: 'service.openai_gateway',
+      message: 'openai.upstream_agent_request',
+      extra: {
+        account_name: 'shared-account',
+        crypto_prefetch: true,
+        upstream_request_id: 'rid-crypto',
+        upstream_url: 'https://crypto-provider.example.com/v1/chat/completions',
+        upstream_request_body: '{"messages":[{"role":"user","content":"btc"}]}',
+      },
+    } satisfies OpsSystemLog)
+
+    expect(detail).toContain('account_name=shared-account')
+    expect(detail.match(/account_name=shared-account/g)).toHaveLength(1)
   })
 })

@@ -77,6 +77,147 @@ func TestOpenAIGatewayService_ForwardChatCompletionsPassthrough_UsesProviderChat
 	require.Equal(t, "Bearer sk-provider", upstream.lastReq.Header.Get("Authorization"))
 }
 
+func TestOpenAIGatewayService_ForwardChatCompletionsPassthrough_EmitsIndexedOutboundRequestLog(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	logSink, restoreSink := captureStructuredLog(t)
+	defer restoreSink()
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"rid_chat_provider_log"}},
+		Body: io.NopCloser(strings.NewReader(`{
+			"id":"chatcmpl_provider_log_1",
+			"object":"chat.completion",
+			"model":"gpt-5.2",
+			"choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]
+		}`)),
+	}
+	upstream := &httpUpstreamRecorder{resp: resp}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	forwardBody := []byte(`{"model":"gpt-5.2","stream":true,"messages":[{"role":"user","content":"btc"}],"access_token":"secret-token"}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model":"gpt-5.2",
+		"messages":[{"role":"user","content":"alpha"}]
+	}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Header.Set("X-Request-Id", "req-upstream-agent")
+	c.Request.Header.Set("X-Client-Request-Id", "creq-upstream-agent")
+
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{
+			Security: config.SecurityConfig{
+				URLAllowlist: config.URLAllowlistConfig{
+					Enabled:           false,
+					AllowInsecureHTTP: true,
+				},
+			},
+		},
+		httpUpstream: upstream,
+	}
+
+	account := &Account{
+		ID:          77010,
+		Name:        "owlia-crypto-provider-log",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"api_key":  "sk-provider",
+			"base_url": "https://crypto-provider.example.com",
+		},
+		Extra: map[string]any{
+			"crypto_router": true,
+		},
+	}
+
+	_, err := svc.ForwardChatCompletionsPassthrough(
+		context.Background(),
+		c,
+		account,
+		forwardBody,
+		"",
+	)
+	require.NoError(t, err)
+	require.True(t, logSink.ContainsMessageAtLevel("openai.upstream_agent_request", "info"))
+	require.True(t, logSink.ContainsFieldValue("upstream_url", "https://crypto-provider.example.com/v1/chat/completions"))
+	require.True(t, logSink.ContainsFieldValue("stream", "false"))
+	require.True(t, logSink.ContainsFieldValue("upstream_request_body", `"access_token":"***"`))
+	require.True(t, logSink.ContainsFieldValue("upstream_request_body", `"content":"btc"`))
+	require.False(t, logSink.ContainsFieldValue("upstream_request_body", "secret-token"))
+}
+
+func TestOpenAIGatewayService_ForwardAsChatCompletions_EmitsIndexedOutboundRequestLog(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	logSink, restoreSink := captureStructuredLog(t)
+	defer restoreSink()
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_chat_responses_log"}},
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			`data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.2","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":1,"output_tokens":1}}}`,
+			"",
+			"data: [DONE]",
+			"",
+		}, "\n"))),
+	}
+	upstream := &httpUpstreamRecorder{resp: resp}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gpt-5.2","messages":[{"role":"user","content":"alpha"}]}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Header.Set("X-Request-Id", "req-chat-route")
+	c.Request.Header.Set("X-Client-Request-Id", "creq-chat-route")
+
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{
+			Security: config.SecurityConfig{
+				URLAllowlist: config.URLAllowlistConfig{
+					Enabled:           false,
+					AllowInsecureHTTP: true,
+				},
+			},
+		},
+		httpUpstream: upstream,
+	}
+
+	account := &Account{
+		ID:          77011,
+		Name:        "owlia-chat-route-log",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"api_key":  "sk-provider",
+			"base_url": "https://crypto-provider.example.com",
+		},
+	}
+
+	body := []byte(`{"model":"gpt-5.2","messages":[{"role":"user","content":"final-log-regression-token"}]}`)
+	_, err := svc.ForwardAsChatCompletions(
+		context.Background(),
+		c,
+		account,
+		body,
+		"",
+		"",
+	)
+	require.NoError(t, err)
+	require.True(t, logSink.ContainsMessageAtLevel("openai.upstream_agent_request", "info"))
+	require.True(t, logSink.ContainsFieldValue("upstream_url", "https://crypto-provider.example.com/v1/responses"))
+	require.True(t, logSink.ContainsFieldValue("upstream_request_body", "final-log-regression-token"))
+	require.True(t, logSink.ContainsFieldValue("stream", "true"))
+}
+
 func TestOpenAIGatewayService_ForwardChatCompletionsPassthrough_AppliesModelMapping(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
