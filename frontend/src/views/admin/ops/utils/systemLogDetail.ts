@@ -85,6 +85,11 @@ export const buildSystemLogDetail = (row: OpsSystemLog) => {
   const accountName = getExtraString(extra, 'account_name')
   const cryptoAdapterNames = getExtraStringList(extra, 'crypto_adapter_names')
   const toolCalls = getExtraJSON(extra, 'tool_calls')
+  const upstreamURL = getExtraString(extra, 'upstream_url')
+  const upstreamPath = getExtraString(extra, 'upstream_path')
+  const openAIPassthrough = getExtraString(extra, 'openai_passthrough')
+  const upstreamRequestBody = getExtraString(extra, 'upstream_request_body')
+  const upstreamRequestBodyTruncated = getExtraString(extra, 'upstream_request_body_truncated')
 
   const cryptoParts: string[] = []
   if (cryptoPrefetch) cryptoParts.push(`crypto_prefetch=${cryptoPrefetch}`)
@@ -95,6 +100,21 @@ export const buildSystemLogDetail = (row: OpsSystemLog) => {
   if (cryptoAdapterNames) cryptoParts.push(`crypto_adapter_names=${cryptoAdapterNames}`)
   if (toolCalls) cryptoParts.push(`tool_calls=${toolCalls}`)
   if (cryptoParts.length > 0) parts.push(cryptoParts.join(' '))
+
+  const outboundParts: string[] = []
+  const hasOutboundInfo = Boolean(
+    upstreamURL || upstreamPath || openAIPassthrough || upstreamRequestBody || upstreamRequestBodyTruncated,
+  )
+  if (hasOutboundInfo) {
+    if (accountName) outboundParts.push(`account_name=${accountName}`)
+    if (upstreamURL) outboundParts.push(`upstream_url=${upstreamURL}`)
+    if (upstreamPath) outboundParts.push(`upstream_path=${upstreamPath}`)
+    if (method) outboundParts.push(`method=${method}`)
+    if (openAIPassthrough) outboundParts.push(`openai_passthrough=${openAIPassthrough}`)
+    if (upstreamRequestBodyTruncated) outboundParts.push(`upstream_request_body_truncated=${upstreamRequestBodyTruncated}`)
+    if (upstreamRequestBody) outboundParts.push(`upstream_request_body=${upstreamRequestBody}`)
+    if (outboundParts.length > 0) parts.push(outboundParts.join(' '))
+  }
 
   const errors = getExtraString(extra, 'errors')
   if (errors) parts.push(`errors=${errors}`)

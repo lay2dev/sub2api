@@ -71,4 +71,35 @@ describe('buildSystemLogDetail', () => {
 
     expect(detail).toContain('tool_calls=["crypto-market.fetch_price"]')
   })
+
+  it('renders outbound upstream request metadata and body for agent requests', () => {
+    const detail = buildSystemLogDetail({
+      id: 4,
+      created_at: '2026-04-13T10:00:00Z',
+      level: 'info',
+      component: 'service.openai_gateway',
+      message: 'openai.upstream_agent_request',
+      request_id: 'req-upstream-agent',
+      client_request_id: 'creq-upstream-agent',
+      account_id: 77,
+      platform: 'openai',
+      model: 'gpt-5.2',
+      extra: {
+        account_name: 'owlia-crypto-provider-log',
+        upstream_url: 'https://crypto-provider.example.com/v1/chat/completions',
+        upstream_path: '/v1/chat/completions',
+        method: 'POST',
+        stream: false,
+        openai_passthrough: true,
+        upstream_request_body: '{"messages":[{"role":"user","content":"btc"}]}',
+        upstream_request_body_truncated: false,
+      },
+    } satisfies OpsSystemLog)
+
+    expect(detail).toContain('upstream_url=https://crypto-provider.example.com/v1/chat/completions')
+    expect(detail).toContain('upstream_path=/v1/chat/completions')
+    expect(detail).toContain('method=POST')
+    expect(detail).toContain('openai_passthrough=true')
+    expect(detail).toContain('upstream_request_body={"messages":[{"role":"user","content":"btc"}]}')
+  })
 })
