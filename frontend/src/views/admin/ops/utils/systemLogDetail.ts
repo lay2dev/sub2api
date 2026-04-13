@@ -100,16 +100,16 @@ export const buildSystemLogDetail = (row: OpsSystemLog) => {
   if (cryptoAdapterNames) cryptoParts.push(`crypto_adapter_names=${cryptoAdapterNames}`)
   if (toolCalls) cryptoParts.push(`tool_calls=${toolCalls}`)
   if (cryptoParts.length > 0) parts.push(cryptoParts.join(' '))
+  const cryptoRenderedAccountName = cryptoParts.some((part) => part.startsWith('account_name='))
 
   const outboundParts: string[] = []
   const hasOutboundInfo = Boolean(
     upstreamURL || upstreamPath || openAIPassthrough || upstreamRequestBody || upstreamRequestBodyTruncated,
   )
   if (hasOutboundInfo) {
-    if (accountName) outboundParts.push(`account_name=${accountName}`)
+    if (accountName && !cryptoRenderedAccountName) outboundParts.push(`account_name=${accountName}`)
     if (upstreamURL) outboundParts.push(`upstream_url=${upstreamURL}`)
     if (upstreamPath) outboundParts.push(`upstream_path=${upstreamPath}`)
-    if (method) outboundParts.push(`method=${method}`)
     if (openAIPassthrough) outboundParts.push(`openai_passthrough=${openAIPassthrough}`)
     if (upstreamRequestBodyTruncated) outboundParts.push(`upstream_request_body_truncated=${upstreamRequestBodyTruncated}`)
     if (upstreamRequestBody) outboundParts.push(`upstream_request_body=${upstreamRequestBody}`)
