@@ -257,7 +257,7 @@ func TestOpsSystemLogSink_FlushRedactsAndPersistsOutboundRequestBody(t *testing.
 	}
 
 	require.Len(t, captured, 1)
-	require.Contains(t, captured[0].ExtraJSON, `"upstream_request_body":"{\"access_token\":\"***"`)
+	require.Contains(t, captured[0].ExtraJSON, `"upstream_request_body":"{\"access_token\":\"***\"`)
 	require.Contains(t, captured[0].ExtraJSON, `btc`)
 	require.NotContains(t, captured[0].ExtraJSON, "secret-token")
 }

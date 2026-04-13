@@ -97,7 +97,7 @@ func TestOpenAIGatewayService_ForwardChatCompletionsPassthrough_EmitsIndexedOutb
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
-	forwardBody := []byte(`{"model":"gpt-5.2","messages":[{"role":"user","content":"btc"}],"access_token":"secret-token"}`)
+	forwardBody := []byte(`{"model":"gpt-5.2","stream":true,"messages":[{"role":"user","content":"btc"}],"access_token":"secret-token"}`)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
 		"model":"gpt-5.2",
 		"messages":[{"role":"user","content":"alpha"}]
@@ -145,6 +145,7 @@ func TestOpenAIGatewayService_ForwardChatCompletionsPassthrough_EmitsIndexedOutb
 	require.NoError(t, err)
 	require.True(t, logSink.ContainsMessageAtLevel("openai.upstream_agent_request", "info"))
 	require.True(t, logSink.ContainsFieldValue("upstream_url", "https://crypto-provider.example.com/v1/chat/completions"))
+	require.True(t, logSink.ContainsFieldValue("stream", "false"))
 	require.True(t, logSink.ContainsFieldValue("upstream_request_body", `"access_token":"***"`))
 	require.True(t, logSink.ContainsFieldValue("upstream_request_body", `"content":"btc"`))
 	require.False(t, logSink.ContainsFieldValue("upstream_request_body", "secret-token"))

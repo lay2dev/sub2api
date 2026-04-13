@@ -82,8 +82,8 @@ var cryptoIntentGuidance = map[string]string{
 // cryptoToolCallDescriptions maps a known tool call name to a short human-readable
 // description of the data it provides. Unknown tool names get a generic fallback.
 var cryptoToolCallDescriptions = map[string]string{
-	"crypto-dex-volume.fetch_snapshot":  "DEX trading volume snapshot across pools",
-	"crypto-dex.fetch_pool_discovery":   "DEX pool discovery: liquidity, TVL, and pool metadata",
+	"crypto-dex-volume.fetch_snapshot": "DEX trading volume snapshot across pools",
+	"crypto-dex.fetch_pool_discovery":  "DEX pool discovery: liquidity, TVL, and pool metadata",
 	"crypto-lp.fetch_positions": "LP positions with tick ranges and liquidity weights. " +
 		"Compute the liquidity-weighted P25–P75 tick distribution, convert to price bounds, " +
 		"and use as the PRIMARY basis for range recommendations. " +
@@ -1324,6 +1324,13 @@ func (s *OpenAIGatewayService) ForwardChatCompletionsPassthrough(
 	if c != nil {
 		c.Set("openai_passthrough", true)
 	}
+	logOpenAIUpstreamAgentRequest(
+		account,
+		upstreamReq,
+		forwardBody,
+		gjson.GetBytes(forwardBody, "stream").Bool(),
+		buildOpenAIUpstreamRequestLogOptions(c),
+	)
 
 	upstreamStart := time.Now()
 	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
