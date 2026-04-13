@@ -98,8 +98,31 @@ describe('buildSystemLogDetail', () => {
 
     expect(detail).toContain('upstream_url=https://crypto-provider.example.com/v1/chat/completions')
     expect(detail).toContain('upstream_path=/v1/chat/completions')
+    expect(detail).toContain('account_name=owlia-crypto-provider-log')
     expect(detail).toContain('method=POST')
     expect(detail).toContain('openai_passthrough=true')
     expect(detail).toContain('upstream_request_body={"messages":[{"role":"user","content":"btc"}]}')
+    expect(detail.match(/account_name=owlia-crypto-provider-log/g)).toHaveLength(1)
+    expect(detail.match(/method=POST/g)).toHaveLength(1)
+  })
+
+  it('renders account_name only once when crypto and outbound fields coexist', () => {
+    const detail = buildSystemLogDetail({
+      id: 5,
+      created_at: '2026-04-13T10:00:00Z',
+      level: 'info',
+      component: 'service.openai_gateway',
+      message: 'openai.upstream_agent_request',
+      extra: {
+        account_name: 'shared-account',
+        crypto_prefetch: true,
+        upstream_request_id: 'rid-crypto',
+        upstream_url: 'https://crypto-provider.example.com/v1/chat/completions',
+        upstream_request_body: '{"messages":[{"role":"user","content":"btc"}]}',
+      },
+    } satisfies OpsSystemLog)
+
+    expect(detail).toContain('account_name=shared-account')
+    expect(detail.match(/account_name=shared-account/g)).toHaveLength(1)
   })
 })
